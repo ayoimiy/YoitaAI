@@ -398,12 +398,30 @@ function Animals:add_game_effect(effect_name,frames)
     return comp
 end
 
+---获取鼠标位置
+function Player:get_mouse_pos()
+    return DEBUG_GetMouseWorld()
+end
+function Player:get_mouse_pos_in_screen(gui)
+    local mx,my = self:get_mouse_pos()
+    local _, _, cw, ch = GameGetCameraBounds()
+    local cx, cy = GameGetCameraPos()
+    cw = cw - 4
+    local cx = cx-cw/2
+    local cy = cy-ch/2
+    local  gw, gh = GuiGetScreenDimensions(gui)
+    return (mx-cx)*gw/cw+1.0, (my-cy)*gh/ch -5
+end
+
+
 function Player:pick_up_item(item)
     local item_id = get_id(item)
     if item_id then
         GamePickUpInventoryItem(self.id,item_id)
     end
 end
+
+
 function Player:get_wand_held()
     local children = EntityGetAllChildren(self.id)
 	if ( children == nil ) then return 0 end
@@ -444,6 +462,9 @@ function Player:get_wand_held()
 
 	return backup_result
 end
+
+
+
 
 -- 获取ui
 function Item:get_ui_info()
