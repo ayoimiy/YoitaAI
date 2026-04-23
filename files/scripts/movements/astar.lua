@@ -1,15 +1,15 @@
 ---核心算法A*
 ---@param start any
 ---@param goal any
----@param nodes any
+---@param nodes table 有效节点集
 ---@param grid_density any
 ---@param valid_node_func any
 ---@return table|nil 为一个数组表，存放从起点到终点的所有离散点
-function AStar(start, goal, nodes, grid_density, valid_node_func)
+function AStar(start, goal, nodes, grid_density, valid_node_func,logger)
 	GamePrint("[AStar] 算法启动")
 	GamePrint("起点: " .. tostring(start.x) .. ", " .. tostring(start.y))
 	GamePrint("终点: " .. tostring(goal.x) .. ", " .. tostring(goal.y))
-	
+
 	-- closed set：已评估过的节点
 	local closedset = {}
 	-- open set：待评估的节点
@@ -33,7 +33,8 @@ function AStar(start, goal, nodes, grid_density, valid_node_func)
 	g_score[start] = 0
 	f_score[start] = g_score[start] + HeuristicCostEstimate(start, goal)
 	
-	GamePrint("[AStar] 初始f_score: " .. f_score[start])
+	logger:info("[AStar] 初始f_score: " .. f_score[start])
+	
 
 	-- 主循环
 	local iteration = 0
@@ -44,10 +45,10 @@ function AStar(start, goal, nodes, grid_density, valid_node_func)
 
 		-- 找到目标，重建路径
 		if current == goal then
-			GamePrint("[AStar] 找到目标! 迭代次数: " .. iteration)
+			logger:info("[AStar] 找到目标! 迭代次数: " .. iteration)
 			local path = UnwindPath({}, came_from, goal)
 			table.insert(path, goal)  -- 添加终点
-			GamePrint("[AStar] 路径重建完成，共 " .. #path .. " 个节点")
+			logger:info("[AStar] 路径重建完成，共 " .. #path .. " 个节点")
 			return path
 		end
 
@@ -57,11 +58,11 @@ function AStar(start, goal, nodes, grid_density, valid_node_func)
 
 		-- 遍历所有有效邻居节点
 		local neighbors = NeighborNodes(current, nodes, goal, node_function, grid_density)
-		
+		logger:debug("有效邻居信息")
 		-- 每10次迭代打印一次进度
-		if iteration % 20 == 0 then
-			GamePrint("[AStar] 迭代: " .. iteration .. " | open: " .. #openset .. " | closed: " .. #closedset .. " | neighbors: " .. #neighbors)
-			GamePrint("       当前节点: " .. tostring(current.x) .. ", " .. tostring(current.y))
+		if iteration % 1 == 0 and current then
+			logger:debug("[AStar] 迭代: " .. iteration .. " | open: " .. #openset .. " | closed: " .. #closedset .. " | neighbors: " .. #neighbors)
+			logger:debug("       当前节点: " .. tostring(current.x) .. ", " .. tostring(current.y))
 		end
 		
 		for _, neighbor in ipairs(neighbors) do
@@ -87,14 +88,14 @@ function AStar(start, goal, nodes, grid_density, valid_node_func)
 		
 		-- 防止无限循环（超过5000次迭代）
 		if iteration > 5000 then
-			GamePrint("[AStar] 警告: 迭代次数超过5000，强制退出")
+			logger:warn("[AStar] 警告: 迭代次数超过5000，强制退出")
 			break
 		end
 	end
 
 	-- 未找到路径
-	GamePrint("[AStar] 未找到路径! 迭代次数: " .. iteration)
-	GamePrint("       open set剩余: " .. #openset .. " | closed set: " .. #closedset)
+	logger:warn("[AStar] 未找到路径! 迭代次数: " .. iteration)
+	logger:warn("       open set剩余: " .. #openset .. " | closed set: " .. #closedset)
 	return nil
 end
 --- 默认预估函数(采用欧几里得算法)

@@ -15,7 +15,7 @@ dofile_once(now_file .. "astar.lua")
 	需要引入 AStar函数
 ]]
 --- 搜素中转，可能是用来适配其他算法？
-function CreatePath(start, goal, nodes, grid_density, valid_node_func)
+function CreatePath(start, goal, nodes, grid_density, valid_node_func,logger)
 	GamePrint("[CreatePath] 开始寻路")
 	GamePrint("起点: " .. tostring(start.x) .. ", " .. tostring(start.y))
 	GamePrint("终点: " .. tostring(goal.x) .. ", " .. tostring(goal.y))
@@ -23,7 +23,11 @@ function CreatePath(start, goal, nodes, grid_density, valid_node_func)
 	GamePrint("网格密度: " .. grid_density)
 	GamePrint("使用自定义验证: " .. (valid_node_func ~= nil and "是" or "否"))
 
-	local resPath = AStar(start, goal, nodes, grid_density, valid_node_func)
+	local resPath = logger:func(AStar,{start, goal, nodes, grid_density, valid_node_func,logger},{
+		current_fore = logger.current_fore + 1,
+        current_pos =  "AStar", 
+	})
+	
 	
 	if resPath then
 		GamePrint("[CreatePath] 路径找到! 节点数: " .. #resPath)
@@ -33,7 +37,8 @@ function CreatePath(start, goal, nodes, grid_density, valid_node_func)
 	
 	return resPath
 end
-
+-- 网格密度：8像素间隔生成节点
+	local grid_density = 8
 --- 搜索算法
 ---@param start_x number 起始点
 ---@param start_y number 起始y
@@ -42,7 +47,7 @@ end
 ---@param smooth boolean 是否启用平滑
 ---@param custom_solver function|table|nil 当其为table时，当node_grid用;否则为自定义节点验证函数
 ---@param node_grid table|nil 节点网络，用于复用
-function FindPath(start_x, start_y, goal_x, goal_y, smooth, custom_solver, node_grid)
+function FindPath(start_x, start_y, goal_x, goal_y, smooth, custom_solver, node_grid,logger)
 	-- 兼容处理：如果custom_solver是表，则作为node_grid处理
 	if (type(custom_solver) == "table") then
 		node_grid = custom_solver
@@ -52,8 +57,7 @@ function FindPath(start_x, start_y, goal_x, goal_y, smooth, custom_solver, node_
 	-- 初始化节点网格（如果未提供）
 	node_grid = node_grid or {}
 	local id = 0
-	-- 网格密度：8像素间隔生成节点
-	local grid_density = 8
+	
 
 	-- 将起点坐标对齐到网格
 	local start_x_rounded = nearest(start_x, grid_density)
@@ -65,7 +69,11 @@ function FindPath(start_x, start_y, goal_x, goal_y, smooth, custom_solver, node_
 		for x = start_x_rounded - 256, start_x_rounded + 256, grid_density do
 			for y = start_y_rounded - 256, start_y + 256, grid_density do
 				-- 只在可通过的位置生成节点（不与固体表面相交）
-				if (not RaytraceSurfaces(x, y, x + 1, y)) then
+				-- 一轮全筛
+				if not ( RaytracePlatforms(x, y, x+3, y) or  RaytracePlatforms(x, y, x-3, y)
+					or  RaytracePlatforms(x, y, x, y+3)  or RaytracePlatforms(x, y, x, y-7) 
+			
+				) then
 					id = id + 1
 					table.insert(node_grid, {id = id, x = x, y = y})
 				end
@@ -73,20 +81,33 @@ function FindPath(start_x, start_y, goal_x, goal_y, smooth, custom_solver, node_
 		end
 	end
 
-
-	GamePrint("节点网络生成情况" .. #node_grid)
+	logger:info("节点网络生成情况" .. #node_grid)
+	logger:debug("需要最近点情况" .. logger:print_table(node_grid))
+	local find_closed_start = FindClosest(start_x, start_y, node_grid)
+	local find_closed_goal = FindClosest(goal_x, goal_y, node_grid)
+	logger:info ("开始点情况" .. logger:print_table(find_closed_start) .. "结束点情况"
+	.. logger:print_table(find_closed_goal)
+)
 	-- 使用A*算法查找路径
-	local path = CreatePath(
-		FindClosest(start_x, start_y, node_grid),   -- 起点（最近的网格节点）
-		FindClosest(goal_x, goal_y, node_grid),     -- 终点（最近的网格节点）
+	
+
+	local path = logger:func(CreatePath,{
+		find_closed_start,   -- 起点（最近的网格节点）
+		find_closed_goal,     -- 终点（最近的网格节点）
 		node_grid,
 		grid_density,
-		custom_solver
-	)
+		custom_solver,
+		logger
+	},{
+		current_fore = logger.current_fore + 1,
+        current_pos =  "CreatePath", 
+	
+	})
+
 
 	-- 路径查找失败
 	if (path == nil) then
-		return nil
+		return nil,node_grid,find_closed_start,find_closed_goal
 	end
 
 	-- 不需要平滑则返回原始路径
@@ -113,9 +134,9 @@ function FindClosest(x, y, t)
 		-- 检查坐标有效性（非nil且非零）
 		if (xe ~= 0) and (xe ~= nil) and (ye ~= 0) and (ye ~= nil) and (x2 ~= 0) and (x2 ~= nil) and (y2 ~= 0) and (y2 ~= nil) then
 			local distance = get_distance(x, y, v.x, v.y)
-			if (distance < closest) then
-				closest_item = v
-				closest = distance
+			if (distance < closest) then				
+					closest_item = v
+					closest = distance		
 			end
 		end
 	end
@@ -127,6 +148,73 @@ end
 function nearest(i, v)
     return math.floor(i / v) * v
 end
+local function get_distance_squared(x1, y1, x2, y2)
+	local squared_distance = (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2)
+	return squared_distance
+end
+function NeighborNodes(theNode, nodes, goal, solver, grid_density)
+	local neighbors = {}
+	for _, node in ipairs(nodes) do
+		-- 调用solver函数验证节点有效性，排除自身
+		if theNode ~= node and solver(theNode, node, goal, grid_density) then
+			table.insert(neighbors, node)
+		end
+	end
+	return neighbors
+end
+function Solver(node, neighbor, goal, node_density)
+	if get_distance_squared(node.x, node.y, neighbor.x, neighbor.y) > 100 then
+		return false
+	end
+	return not IsPointObstructed({x = neighbor.x, y = neighbor.y}, {x = node.x, y = node.y})
+end
+
+
+--[[
+	为table表添加reverse方法（数组反转）
+	将表中的元素顺序颠倒
+]]
+table.reverse = function(t)
+    local n = #t
+    local i = 1
+    while i < n do
+      t[i], t[n] = t[n], t[i]
+      i = i + 1
+      n = n - 1
+    end
+end
+
+--[[
+	为table表添加indexOf方法（查找元素索引）
+	参数：要查找的对象
+	返回：元素在表中的索引，未找到返回nil
+]]
+table.indexOf = function(t, object)
+    if type(t) ~= "table" then error("table expected, got " .. type(t), 2) end
+    for i, v in pairs(t) do
+        if object == v then
+            return i
+        end
+    end
+end
+--[[
+	删除表中指定索引范围内的所有元素
+	参数：
+	- t: 目标表
+	- i1: 起始索引
+	- i2: 结束索引
+]]
+function table.removeRange(t, i1, i2)
+	indexes = {}
+	for k, v in pairs(t) do
+		if (k >= i1 and k <= i2) then
+			table.insert(indexes, k)
+		end
+	end
+	for k, v in pairs(indexes) do
+		table.remove(t, v)
+	end
+end
 --- 路径平滑算法
 ---@param orig_path any
 function SmoothPath(orig_path)
@@ -134,7 +222,7 @@ function SmoothPath(orig_path)
 	local path = ShallowCopy(orig_path)
 	table.insert(smooth_path, path[1])  -- 保留起点
 	table.remove(path, 1)
-	table.reverse(path)  -- 反转剩余路径便于从末尾处理
+	-- table.reverse(path)  -- 反转剩余路径便于从末尾处理
 
 	while #path > 0 do
 		local lP = smooth_path[#smooth_path]  -- 上一个保留点
@@ -192,49 +280,5 @@ function ShallowCopy(orig)
     end
     return copy
 end
---[[
-	为table表添加reverse方法（数组反转）
-	将表中的元素顺序颠倒
-]]
-table.reverse = function(t)
-    local n = #t
-    local i = 1
-    while i < n do
-      t[i], t[n] = t[n], t[i]
-      i = i + 1
-      n = n - 1
-    end
-end
 
---[[
-	为table表添加indexOf方法（查找元素索引）
-	参数：要查找的对象
-	返回：元素在表中的索引，未找到返回nil
-]]
-table.indexOf = function(t, object)
-    if type(t) ~= "table" then error("table expected, got " .. type(t), 2) end
-    for i, v in pairs(t) do
-        if object == v then
-            return i
-        end
-    end
-end
 
---[[
-	删除表中指定索引范围内的所有元素
-	参数：
-	- t: 目标表
-	- i1: 起始索引
-	- i2: 结束索引
-]]
-function table.removeRange(t, i1, i2)
-	indexes = {}
-	for k, v in pairs(t) do
-		if (k >= i1 and k <= i2) then
-			table.insert(indexes, k)
-		end
-	end
-	for k, v in pairs(indexes) do
-		table.remove(t, v)
-	end
-end

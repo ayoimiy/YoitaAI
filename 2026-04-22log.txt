@@ -1,0 +1,17 @@
+23:17:53 [INFO] [Init] [点击] 设置目标点: 992, -3
+23:17:53 [INFO] [Init] [点击] 玩家位置: 889, -19
+23:17:53 [INFO] [Init] [点击] 开始寻路...
+ 23:17:53 [INFO] [FindPath] 节点网络生成情况1875
+ 23:17:53 [INFO] [FindPath] 开始点情况 y:-16
+ x:888
+ id:1029
+结束点情况 y:-8
+ x:992
+ id:1424
+
+   23:17:53 [INFO] [AStar] [AStar] 迭代: 1 | open: 0 | closed: 1 | neighbors: 0
+   23:17:53 [INFO] [AStar]        当前节点: 888, -16
+   23:17:53 [WARN] [AStar] [AStar] 未找到路径! 迭代次数: 1
+   23:17:53 [WARN] [AStar]        open set剩余: 0 | closed set: 1
+23:17:53 [WARN] [Init] [点击] 寻路失败! 未找到路径
+

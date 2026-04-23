@@ -14,7 +14,7 @@ function Logger:debug(msg)
     self:write("[Debug]" .. msg)
 end
 function Logger:warn(msg)
-    self:warn("[Warn]" .. msg)
+    self:write("[Warn]" .. msg)
 end
 
 local logger = {}
@@ -410,7 +410,7 @@ function Player:get_mouse_pos_in_screen(gui)
     local cx = cx-cw/2
     local cy = cy-ch/2
     local  gw, gh = GuiGetScreenDimensions(gui)
-    return (mx-cx)*gw/cw+1.0, (my-cy)*gh/ch -5
+    return (mx-cx)*gw/cw+1.0, (my-cy)*gh/ch -3
 end
 
 
