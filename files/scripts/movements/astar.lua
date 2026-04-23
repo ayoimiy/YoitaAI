@@ -1,3 +1,9 @@
+
+local mod_name = "YoitaAI"
+local base_file = "mods/" .. mod_name .. "/"
+local now_file = base_file .. "files/scripts/movements/"
+local M_utils = dofile_once(now_file .. "move_utils.lua")
+
 ---核心算法A*
 ---@param start any
 ---@param goal any
@@ -6,9 +12,7 @@
 ---@param valid_node_func any
 ---@return table|nil 为一个数组表，存放从起点到终点的所有离散点
 function AStar(start, goal, nodes, grid_density, valid_node_func,logger)
-	GamePrint("[AStar] 算法启动")
-	GamePrint("起点: " .. tostring(start.x) .. ", " .. tostring(start.y))
-	GamePrint("终点: " .. tostring(goal.x) .. ", " .. tostring(goal.y))
+
 
 	-- closed set：已评估过的节点
 	local closedset = {}
@@ -31,7 +35,7 @@ function AStar(start, goal, nodes, grid_density, valid_node_func,logger)
 	-- f_score：g_score + 启发式估算
 	local g_score, f_score = {}, {}
 	g_score[start] = 0
-	f_score[start] = g_score[start] + HeuristicCostEstimate(start, goal)
+	f_score[start] = g_score[start] + HeuristicCostEstimate(start, goal,nodes)
 	
 	logger:info("[AStar] 初始f_score: " .. f_score[start])
 	
@@ -57,26 +61,33 @@ function AStar(start, goal, nodes, grid_density, valid_node_func,logger)
 		table.insert(closedset, current)
 
 		-- 遍历所有有效邻居节点
-		local neighbors = NeighborNodes(current, nodes, goal, node_function, grid_density)
+		local neighbors = {}
+		for _,v in ipairs(M_utils.get_neighbors(current,65,nodes)) do 
+			if (node_function(nodes[current],nodes[v],nodes[goal],grid_density)) then
+				table.insert(neighbors,v)
+			end			
+		end		
 		logger:debug("有效邻居信息")
 		-- 每10次迭代打印一次进度
 		if iteration % 1 == 0 and current then
 			logger:debug("[AStar] 迭代: " .. iteration .. " | open: " .. #openset .. " | closed: " .. #closedset .. " | neighbors: " .. #neighbors)
-			logger:debug("       当前节点: " .. tostring(current.x) .. ", " .. tostring(current.y))
+			logger:debug("       当前节点: " .. tostring(nodes[current].x) .. ", " .. tostring(nodes[current].y))
+			-- logger:info("邻居为" .. logger:print_table(neighbors))
 		end
 		
 		for _, neighbor in ipairs(neighbors) do
 			-- 跳过已在closed set中的节点
 			if NotIn(closedset, neighbor) then
 				-- 计算经过当前节点到邻居的g值
-				local tentative_g_score = g_score[current] + DistanceBetween(current, neighbor)
+				local tentative_g_score = g_score[current] + DistanceBetween(current, neighbor,nodes)
 
 				-- 如果是更好的路径或邻居不在open set中
 				if NotIn(openset, neighbor) or tentative_g_score < g_score[neighbor] then
 					-- 更新路径记录
 					came_from[neighbor] = current
+					-- logger:info("更新come_from" .. logger:print_table(came_from))
 					g_score[neighbor] = tentative_g_score
-					f_score[neighbor] = g_score[neighbor] + HeuristicCostEstimate(neighbor, goal)
+					f_score[neighbor] = g_score[neighbor] + HeuristicCostEstimate(neighbor, goal,nodes)
 
 					-- 如果邻居不在open set中，添加进去
 					if NotIn(openset, neighbor) then
@@ -99,24 +110,16 @@ function AStar(start, goal, nodes, grid_density, valid_node_func,logger)
 	return nil
 end
 --- 默认预估函数(采用欧几里得算法)
----@param nodeA table 
----@param nodeB table
-function HeuristicCostEstimate(nodeA, nodeB)
+---@param nodeA_idx table 
+---@param nodeB_idx table
+function HeuristicCostEstimate(nodeA_idx, nodeB_idx,nodes)
+	local nodeA = nodes[nodeA_idx]
+	local nodeB = nodes[nodeB_idx]
 	if nodeA.x and nodeA.y and nodeB.x and nodeB.y then
-		return get_distance(nodeA.x, nodeA.y, nodeB.x, nodeB.y)
+		return M_utils.get_distance(nodeA.x, nodeA.y, nodeB.x, nodeB.y)
 	else
 		return 0
 	end
-end
---- 采用范数平方，避免开方
----@param dx any
----@param dy any
----@param dx2 any
----@param dy2 any
-local function get_distance_squared(dx, dy, dx2, dy2)
-	local dx_ = dx - dx2
-	local dy_ = dy - dy2
-	return dx_ * dx_ + dy_ * dy_
 end
 --- 默认节点验证函数
 --- 若节点与领居节点之间存在障碍物或者距离大于10像素，则返回false
@@ -126,7 +129,7 @@ end
 ---@param node_density any
 ---@return boolean
 function IsValidNode(node, neighbor, goal, node_density)
-	if get_distance_squared(node.x, node.y, neighbor.x, neighbor.y) > 100 then
+	if M_utils.get_distance2(node.x, node.y, neighbor.x, neighbor.y) > 100 then
 		return false
 	end
 	return not IsPointObstructed({x = neighbor.x, y = neighbor.y}, {x = node.x, y = node.y})
@@ -145,6 +148,7 @@ local infinity = 1/0
 --- 找到最低的函数
 ---@param set any
 ---@param f_score any
+---@return number
 function LowestFScore(set, f_score)
 	local lowest, bestNode = infinity, nil
 	for _, node in ipairs(set) do
@@ -187,10 +191,10 @@ end
 ---@param solver any
 ---@param grid_density any
 function NeighborNodes(theNode, nodes, goal, solver, grid_density)
-	local neighbors = {}
+	local neighbors =  {}
 	for _, node in ipairs(nodes) do
 		-- 调用solver函数验证节点有效性，排除自身
-		if theNode ~= node and solver(theNode, node, goal, grid_density) then
+		if theNode ~= node and solver(nodes[theNode], nodes[node], goal, grid_density) then
 			table.insert(neighbors, node)
 		end
 	end
@@ -207,9 +211,11 @@ function NotIn(set, theNode)
 	return true
 end
 ---获取平方距离？
----@param nodeA any
----@param nodeB any
+---@param nodeA_idx number
+---@param nodeB_idx number 
 ---@return number
-function DistanceBetween(nodeA, nodeB)
-	return get_distance(nodeA.x, nodeA.y, nodeB.x, nodeB.y)
+function DistanceBetween(nodeA_idx, nodeB_idx,nodes)
+	local nodeA = nodes[nodeA_idx]
+	local nodeB = nodes[nodeB_idx]
+	return M_utils.get_distance(nodeA.x, nodeA.y, nodeB.x, nodeB.y)
 end

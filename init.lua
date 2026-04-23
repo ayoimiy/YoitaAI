@@ -14,9 +14,6 @@ local current_index = 1
 local last_time_current_index_changed = 0
 local frame_counter = 0
 
-
-
-
 -- 日志系统
 local Logger = dofile_once(base_file .. "files/scripts/Log/log.lua")
 local logger = Logger:new({
@@ -67,10 +64,8 @@ end
 -- 平台碰撞
 local function node_func(n, neigh, goal, density)
     local d = 5
-    local dist = get_square_distance(n.x, n.y, neigh.x, neigh.y)
-    -- logger:info("该节点距离为" .. dist)
-    -- 检查邻居距离是否超过密度阈值
-    if dist > 3 * density * density then return false end
+  
+
     -- -- 非目标节点需要检查与周围平台的碰撞
     -- if neigh ~= goal then
     --     for dx = -d, d, d do
@@ -80,7 +75,7 @@ local function node_func(n, neigh, goal, density)
     --     end
     -- end
     -- 确保当前节点到邻居节点路径无障碍
-    logger:debug("是否是存在障碍？")
+    -- logger:debug("是否是存在障碍？")
     return not RaytracePlatforms(neigh.x, neigh.y, n.x, n.y)
 end
 local max_dist = 75
@@ -138,22 +133,16 @@ function OnWorldPreUpdate()
                 end
             end
         elseif a == 2 then
-            for i,v in ipairs(node_grid or {}) do
+            for k,v in pairs(node_grid or {}) do
                 GameCreateSpriteForXFrames( "data/particles/radar_enemy_strong.png", v.x, v.y, true, 0, 0, 2, true )
                 -- local vx,vy = world_2_ui_pos(v.x,v.y)
                 -- GuiText(gui,vx,vy,string.format("序号:%.0f(%.0f,%.0f)",i,v.x,v.y))              
             end
         end
        
-       
-       
         if  InputIsKeyJustDown(13) then
             a = (a+1) %3
         end
-
-
-
-
         if GuiButton(gui,1145,mx_screen,my_screen,"aa    ") then
             -- 设置目标坐标
             targetX,targetY = mx,my
