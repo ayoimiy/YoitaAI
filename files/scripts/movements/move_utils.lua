@@ -35,8 +35,6 @@ function M.get_neighbors(idx,x_num,t)
     return neighbors
 end
 
-
-
 --- 作用是将寻找当前坐标最近的网格点，取该网格点作为起始点
 ---@param i number 坐标
 ---@param v number 节点距离

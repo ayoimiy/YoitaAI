@@ -49,11 +49,6 @@ function ui_2_world(x,y)
 
     return (x-1.0)*cw/gw+cx, (y+5)*ch/gh+cy 
 end
-
-
-
- 
-
 local last_vx  = 0 
 local last_vy = 0 
 -- 计算两点之间的平方距离（用于距离比较，避免开方运算提高性能）
@@ -63,9 +58,6 @@ local function get_square_distance(x1, y1, x2, y2)
 end
 -- 平台碰撞
 local function node_func(n, neigh, goal, density)
-    local d = 5
-  
-
     -- -- 非目标节点需要检查与周围平台的碰撞
     -- if neigh ~= goal then
     --     for dx = -d, d, d do
@@ -81,6 +73,7 @@ end
 local max_dist = 75
 local g_start,g_end 
 local a = 0
+local tick  =0
 function OnWorldPreUpdate()   
     frame_counter = frame_counter + 1
     GuiStartFrame(gui)
@@ -223,29 +216,50 @@ function OnWorldPreUpdate()
                     end
 
                      -- 检查是否长时间停留在固定点
-                     if GameGetFrameNum() - last_time_current_index_changed > 100 then
-                        if  current_index>1 then
-                            -- 尝试回到上一个目标点，并进行更严格的限制
-                            current_index = current_index -1 
-                            max_dist = 10
+                    if GameGetFrameNum() - last_time_current_index_changed > 100  then
+                        if   tick ==0  then
+                            logger:info("[点击] 设置目标点: " .. math.floor(targetX) .. ", " .. math.floor(targetY))
+                            logger:info("[点击] 玩家位置: " .. math.floor(x) .. ", " .. math.floor(y))  
+                            -- 查找路径
+                            -- 如果位置和目标都有效，执行路径查找
+                            if x and y and targetX and targetY then
+                                logger:info("[点击] 开始寻路...")
+                                -- path_true, node_grid = FindPath(x, y, targetX, targetY, false, node_func)
+                                
+                                path_true, node_grid,g_start,g_end =logger:func(FindPath,
+                                    {x, y, targetX, targetY, false, node_func,nil,logger}
+                                    ,{
+                                        current_fore = logger.current_fore + 1,
+                                        current_pos =  "FindPath",                               
+                                })   
+                                path = path_true
+                                current_index = 1  -- 当前路径点索引
+                                
+                                if path_true then
+                                    logger:info("[点击] 寻路成功! 路径节点数: " .. #path_true)
+                                    logger:info("[点击] 节点网格大小: " .. (node_grid and #node_grid or 0))
+                                    last_time_current_index_changed = GameGetFrameNum()
+
+                                else
+                                    logger:warn("[点击] 寻路失败! 未找到路径")
+                                end
+                            else
+                                logger:warn("[点击] 坐标无效，无法寻路")
+                            end
+                            tick = 100
+                        else
+                            tick = tick -1 
                         end
-                     else
+                    else
                         max_dist = 75 
-                     end
-
-
+                    end
                     -- 检查是否到达当前路径点（容差范围5像素）
                     local disti = get_square_distance(x, y - 4, point.x, point.y)
                     if disti < max_dist then
                         logger:info("[移动] 到达节点 " .. current_index .. ": " .. math.floor(point.x) .. ", " .. math.floor(point.y))
                         current_index = current_index + 1
                         last_time_current_index_changed = GameGetFrameNum()
-                    end
-                    
-                   
-
-
-
+                    end                            
                     -- 每10帧输出一次移动状态
                     if frame_counter % 10 == 0 then
                         logger:info("[移动] 目标节点 " .. current_index .. "/" .. #path .. ": " .. math.floor(point.x) .. ", " .. math.floor(point.y))

@@ -60,6 +60,15 @@ function AStar(start, goal, nodes, grid_density, valid_node_func,logger)
 		RemoveNode(openset, current)
 		table.insert(closedset, current)
 
+		
+
+
+
+
+
+
+
+
 		-- 遍历所有有效邻居节点
 		local neighbors = {}
 		for _,v in ipairs(M_utils.get_neighbors(current,65,nodes)) do 
