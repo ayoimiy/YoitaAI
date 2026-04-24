@@ -8,32 +8,20 @@ dofile_once("data/scripts/lib/utilities.lua")
 local M = {
 }
 
-local W = 200
+-- local W = 200
 --[[
 处理点映射
 ]]
 -- 将二维点映射到一维
 ---@param x number
 ---@param y number
----@param x_num number
-function M.get_point_idx(x,y,x_num)
+---@param W number 横向最大宽度
+function M.get_point_idx(x,y,W)
+	x = math.floor(x)
+	y = math.floor(y)
     return x + y * W + 1
 end
---- 寻找邻居
----@param idx number
----@param x_num number
----@param t table 按idx存储节点的表
----@return table 存储节点的数组
-function M.get_neighbors(idx,x_num,t)
-    local nei_idx ={-1,1,W,-W,W+1,W-1,-W+1,-W-1}
-    local neighbors = {}
-    for _,dx in ipairs(nei_idx) do 
-        if (t[idx+dx]) then
-            table.insert(neighbors,idx+dx)
-        end
-    end
-    return neighbors
-end
+
 
 --- 作用是将寻找当前坐标最近的网格点，取该网格点作为起始点
 ---@param i number 坐标

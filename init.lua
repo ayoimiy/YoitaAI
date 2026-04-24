@@ -215,7 +215,7 @@ function OnWorldPreUpdate()
                         controls.mButtonDownDown = in_water and not RaytraceSurfaces(x, y, x, y)
                     end
 
-                     -- 检查是否长时间停留在固定点
+                    -- 检查是否长时间停留在固定点
                     if GameGetFrameNum() - last_time_current_index_changed > 100  then
                         if   tick ==0  then
                             logger:info("[点击] 设置目标点: " .. math.floor(targetX) .. ", " .. math.floor(targetY))
@@ -247,11 +247,12 @@ function OnWorldPreUpdate()
                                 logger:warn("[点击] 坐标无效，无法寻路")
                             end
                             tick = 100
+                            
                         else
                             tick = tick -1 
                         end
                     else
-                        max_dist = 75 
+                        -- max_dist = 75 
                     end
                     -- 检查是否到达当前路径点（容差范围5像素）
                     local disti = get_square_distance(x, y - 4, point.x, point.y)
