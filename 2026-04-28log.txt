@@ -1,163 +1,45 @@
-23:15:01 [INFO] [Init] 1
-23:15:01 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:02 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:03 [INFO] [Init] 1
-23:15:04 [INFO] [Init] 1
-23:15:04 [INFO] [Init] 1
-23:15:04 [INFO] [Init] 1
-23:15:04 [INFO] [Init] 1
-23:15:04 [INFO] [Init] 1
-23:15:04 [INFO] [Init] 1
-23:15:04 [INFO] [Init] 1
-23:15:04 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] 1
-23:15:05 [INFO] [Init] [点击] 设置目标点: 200, -177
-23:15:05 [INFO] [Init] [点击] 玩家位置: 227, -80
-23:15:05 [INFO] [Init] [点击] 开始寻路...
-   23:15:05 [INFO] [寻路算法] [AStar] 初始f_score: 107.18376618407
-   23:15:05 [INFO] [寻路算法] [AStar] 找到目标! 迭代次数: 141
-   23:15:05 [INFO] [寻路算法] [AStar] 路径重建完成，共 25 个节点
- 23:15:05 [INFO] [FindPath] 路径节点数量: 25
-23:15:05 [WARN] [Init] [点击] 寻路失败! 未找到路径
+23:17:41 [INFO] [Init] [移动] 到达节点 1: 361, -119
+23:17:41 [INFO] [Init] [移动] 目标节点 2/24: 361, -119
+23:17:41 [INFO] [Init] [移动] 距离: 1 像素
+23:17:41 [INFO] [Init] [移动] 到达节点 2: 365, -119
+23:17:41 [INFO] [Init] [移动] 到达节点 3: 369, -119
+23:17:41 [INFO] [Init] [移动] 到达节点 4: 373, -123
+23:17:41 [INFO] [Init] [移动] 到达节点 5: 377, -123
+23:17:41 [INFO] [Init] [移动] 目标节点 6/24: 381, -123
+23:17:41 [INFO] [Init] [移动] 距离: 11 像素
+23:17:41 [INFO] [Init] [移动] 到达节点 6: 381, -123
+23:17:41 [INFO] [Init] [移动] 到达节点 7: 385, -123
+23:17:41 [INFO] [Init] [移动] 目标节点 8/24: 389, -123
+23:17:41 [INFO] [Init] [移动] 距离: 11 像素
+23:17:41 [INFO] [Init] [移动] 到达节点 8: 389, -123
+23:17:41 [INFO] [Init] [移动] 到达节点 9: 393, -123
+23:17:41 [INFO] [Init] [移动] 目标节点 10/24: 397, -123
+23:17:41 [INFO] [Init] [移动] 距离: 9 像素
+23:17:41 [INFO] [Init] [移动] 到达节点 10: 397, -123
+23:17:41 [INFO] [Init] [移动] 到达节点 11: 401, -123
+23:17:42 [INFO] [Init] [移动] 到达节点 12: 405, -123
+23:17:42 [INFO] [Init] [移动] 目标节点 13/24: 405, -123
+23:17:42 [INFO] [Init] [移动] 距离: 8 像素
+23:17:42 [INFO] [Init] [移动] 到达节点 13: 409, -123
+23:17:42 [INFO] [Init] [移动] 到达节点 14: 413, -123
+23:17:42 [INFO] [Init] [移动] 目标节点 15/24: 417, -123
+23:17:42 [INFO] [Init] [移动] 距离: 10 像素
+23:17:42 [INFO] [Init] [移动] 到达节点 15: 417, -123
+23:17:42 [INFO] [Init] [移动] 到达节点 16: 421, -123
+23:17:42 [INFO] [Init] [移动] 目标节点 17/24: 425, -123
+23:17:42 [INFO] [Init] [移动] 距离: 9 像素
+23:17:42 [INFO] [Init] [移动] 到达节点 17: 425, -123
+23:17:42 [INFO] [Init] [移动] 到达节点 18: 429, -123
+23:17:42 [INFO] [Init] [移动] 到达节点 19: 433, -123
+23:17:42 [INFO] [Init] [移动] 目标节点 20/24: 433, -123
+23:17:42 [INFO] [Init] [移动] 距离: 7 像素
+23:17:42 [INFO] [Init] [点击] 设置目标点: 527, -116
+23:17:42 [INFO] [Init] [点击] 玩家位置: 428, -118
+23:17:42 [INFO] [Init] [点击] 开始寻路...
+   23:17:42 [INFO] [寻路算法] [AStar] 初始f_score: 98.485281374239
+   23:17:42 [INFO] [寻路算法] [AStar] 找到目标! 迭代次数: 48
+   23:17:42 [INFO] [寻路算法] [AStar] 路径重建完成，共 25 个节点
+ 23:17:42 [INFO] [FindPath] 路径节点数量: 25
+23:17:42 [INFO] [Init] [点击] 寻路成功! 路径节点数: 25
+23:17:42 [INFO] [Init] [点击] 节点网格大小: 0
 

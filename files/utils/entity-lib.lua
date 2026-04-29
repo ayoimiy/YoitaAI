@@ -294,7 +294,7 @@ end
 
 --- 获取组件
 ---@param type_name string
----@param including_disabled boolean
+---@param including_disabled boolean|nil
 ---@return table|nil
 function Entity:get_comp(type_name,including_disabled)
     if not self:is_living() then return nil end
@@ -314,7 +314,7 @@ end
 
 --- 获取组件s
 ---@param type_name string
----@param including_disabled boolean
+---@param including_disabled boolean|nil
 ---@return table|nil
 function Entity:get_comps(type_name,including_disabled)
     if not self:is_living() then return nil end
