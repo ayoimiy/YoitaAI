@@ -5,7 +5,7 @@ local now_file = base_file .. "files/scripts/movements/"
     入口为FindPath()，主要用于搜索到一条可用路径
 ]]
 dofile_once(base_file .. "files/scripts/utils/astar.lua")
-local M_utils = dofile_once(now_file .. "move_utils.lua")
+
 -- 网格密度：8像素间隔生成节点
 local grid_density = 4
 local max_path_length = 256

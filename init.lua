@@ -20,13 +20,9 @@ dofile_once(base_file .. "files/scripts/movements/ai_movement_utilities.lua")
 function OnPlayerSpawned(entity)
     Player = M.Player:new(entity)
     local comp = Player:controls_comp()
-    comp.enabled = false
+    comp.enabled = false 
 end
--- 计算两点之间的平方距离（用于距离比较，避免开方运算提高性能）
-local function get_square_distance(x1, y1, x2, y2)
-	local squared_distance = (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2)
-	return squared_distance
-end
+
 function world_2_ui_pos(x,y)
     local _, _, cw, ch = GameGetCameraBounds()
     local cx, cy = GameGetCameraPos()
@@ -47,7 +43,9 @@ function ui_2_world(x,y)
     return (x-1.0)*cw/gw+cx, (y+5)*ch/gh+cy 
 end
 
-
+--引入kick
+local kick  = dofile_once(base_file .. "files/scripts/action/kick.lua" )    
+local sTout = dofile_once(base_file ..  "files/scripts/utils/SetTimeOut.lua")
 
 --[[
 显示逻辑
@@ -78,12 +76,63 @@ local find_path={
     last_time_current_index_changed = 0,
     max_dist = 75 
 }
-function OnWorldPreUpdate()   
-    -- frame_counter = frame_counter + 1
+local frame_counter = 0
+local kick_time = 0 
+function OnWorldPreUpdate() 
+    
+    sTout:Loop()
+
+    frame_counter = frame_counter + 1
     GuiStartFrame(gui)
     if gui == nil then
         gui = GuiCreate()
     end
+    GuiText(gui,100,200,"表地址" .. tostring(kick))
+
+    local _kick  = dofile_once(base_file .. "files/scripts/action/kick.lua" )    
+    -- GamePrint("表地址：" .. tostring(_kick))
+
+--    if Player and Player:is_living() then
+--         kick:run_per_frame(Player)
+--         if frame_counter %120 == 0  then            
+--             kick:kick()
+--         end
+--     end
+    local dy = 10 
+    if not Player or not Player:is_living() then return nil end 
+    local controls = Player:controls_comp()
+   
+    -- 按p设置
+    if InputIsKeyJustDown(19) then
+        controls.enabled = not controls.enabled 
+    end
+    if InputIsKeyJustDown(18) then
+        -- controls.mButtonDownLeftClick = true
+        Kick_book(Player,sTout)
+
+       
+ 
+        
+    end
+    -- 显示某个值
+    -- GuiText(gui,100,220, "左键点击"  ..  tostring(controls.mButtonDownLeftClick))
+    GuiText(gui,100,220, "左键点击"  ..  tostring(controls.mButtonDownThrow))
+    GuiText(gui,100,240, "左键点击"  ..  tostring(controls.mButtonFrameThrow))
+
+    -- 记录踢板时间
+    if controls.mButtonDownKick == true then
+        kick_time = GameGetFrameNum()
+    end
+    if kick_time~=0 and controls.mButtonDownThrow == true then
+        GamePrint("踢击时间" .. tostring(GameGetFrameNum() - kick_time))
+        kick_time = 0 
+    end
+
+
+
+
+    if true then return end 
+    
     if Player and Player:is_living() then
         Log_Speed(Player,logger)
         
@@ -245,4 +294,55 @@ function Apply_Move_No_Path(player)
     controls.mButtonDownLeft  = false
 end
 
+-- 踢板skill
+---@param player Player
+---@param sTout STOut
+function Kick_book(player,sTout)
+    local controls = player:controls_comp()
+    if not controls then return nil end 
+    local controls_enabled = controls.enabled
+    controls.enabled = false
+    -- 踢击
+    controls.mButtonDownKick = true
+    controls.mButtonFrameKick = GameGetFrameNum()
+    sTout:add_func(function ()
+        controls.mButtonDownKick = false
+    end,1)
+    
+    -- 修改某个键值
+    sTout:add_func(function (_player)        
+        local x,y = _player:get_pos()
+        -- 寻找最近的生物
+        local entities = EntityGetInRadiusWithTag(x,y,100,"hittable")
+        local tx,ty =0,0 
+        for _,v in ipairs(entities or {}) do
+            local entity  = M.Animals:new(v)
+            if entity:get_herd_id()~=nil and entity:get_herd_id()~=0 and    not entity:has_tag("player_unit") then
+                tx,ty = entity:get_pos()
+                break  
+            end
+        end
+        if tx~=0 and ty ~=0 then
+                -- 修改鼠标位置？
+            ComponentSetValueVector2(controls:get_id(),"mMousePosition",tx,ty)
+            ComponentSetValueVector2(controls:get_id(),"mAimingVector",tx-x,ty-y)
+            -- 修改相对位置
+            ComponentSetValueVector2(controls:get_id(),"mAimingVectorNormalized",(tx-x)/100,(ty-y)/100)
+        end
+        -- 扔出石板
+        controls.mButtonDownThrow = true
+        controls.mButtonFrameThrow = GameGetFrameNum()+1            
+    end,5,{player})
+    -- 修改某个键值
+    sTout:add_func(function ()
+        -- controls.mButtonDownLeftClick = false
+        controls.mButtonDownThrow = false
+        -- controls.enabled = controls_enabled
+    end,6)
+    sTout:add_func(function ()
+        -- controls.mButtonDownLeftClick = false
+        -- controls.mButtonDownThrow = false
+        controls.enabled = controls_enabled
+    end,30)
+end
 

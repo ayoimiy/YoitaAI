@@ -198,6 +198,10 @@ end
 Entity.__index = Entity
 ---@param eid number
 function Entity:new(eid)
+    if eid == nil then
+        error("new() need id,miao~")
+    end
+
     local obj = {}
     obj.id = eid 
     setmetatable(obj,Entity)
@@ -370,7 +374,6 @@ end
 function Entity:inventory2_comp(including_disabled)
     return self:get_comp("Inventory2Component",including_disabled)
 end
-
 
 Animals.__index = Animals
 setmetatable(Animals,Entity)
