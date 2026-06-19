@@ -14,6 +14,7 @@ local Heap = dofile_once(base_file .. "files/scripts/utils/Heap.lua")
 ---@field get_cost function 获取g值
 ---@field is_goal function 是否是目标节点
 ---@field logger  table   日志
+---@field max_count number? 最大迭代次数
 
 ---@param config AStarConfig 配置
 ---@return table|nil,table|nil 为一个数组表，存放从起点到终点的所有离散点;为所有遍历的节点
@@ -27,6 +28,7 @@ function AStar(config)
 	local get_neighbors_func = config.get_neighbors_func
 	local get_cost = config.get_cost
 	local is_goal = config.is_goal
+	local max_count = config.max_count or 5000
 
 	local open_set = Heap:new()
 	local closed_set = {}
@@ -84,7 +86,7 @@ function AStar(config)
 				end
 			end
 		end
-		if count > 5000 then
+		if count > max_count then
 			logger:warn("[AStar] 警告: 迭代次数超过5000，强制退出")
 			break
 		end

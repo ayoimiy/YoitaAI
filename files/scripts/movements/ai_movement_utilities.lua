@@ -7,16 +7,12 @@ local now_file = base_file .. "files/scripts/movements/"
 dofile_once(base_file .. "files/scripts/utils/astar.lua")
 
 -- 网格密度：8像素间隔生成节点
-local grid_density = 4
-local max_path_length = 256
-local function CreatePath(config,func)
-	local resPath = config.logger:func(func,{config},{
-		current_fore = config.logger.current_fore + 1,
-        current_pos =  "寻路算法"
-	})
-	return resPath
-end
-local Path_Find = {}   --存储一些路径
+local FindPath = {}   --寻路模块包装类
+local grid_density = 8     -- 节点密度
+local Max_path_length = 5000  -- 最大路径长度
+
+local Path_Find = {}   --寻路函数实现
+
 --- 搜索算法
 ---@param start_x number 起始点
 ---@param start_y number 起始y
@@ -25,7 +21,7 @@ local Path_Find = {}   --存储一些路径
 ---@param smooth boolean 是否启用平滑
 ---@param custom_solver function|table|nil 当其为table时，当node_grid用;否则为自定义节点验证函数
 ---@param node_grid table|nil 节点网络，用于复用
-function FindPath(start_x, start_y, goal_x, goal_y, smooth, custom_solver, node_grid,logger)
+function FindPath.find(start_x, start_y, goal_x, goal_y, smooth, custom_solver, node_grid,logger)
 	-- 兼容处理：如果custom_solver是表，则作为node_grid处理
 	if (type(custom_solver) == "table") then
 		node_grid = custom_solver
@@ -45,10 +41,6 @@ function FindPath(start_x, start_y, goal_x, goal_y, smooth, custom_solver, node_
 		x =math.floor(goal_x/grid_density)*grid_density,     
 		y = math.floor(goal_y/grid_density)*grid_density
 	}
-	if math.abs(goal.x-start.x) + math.abs(goal.y-start.y) > max_path_length  then
-		logger:info("目标点与起始点距离过远")
-		return nil,nil 
-	end 
 	-- 使用A*算法查找路径
 	local config = {
 		start = start,
@@ -59,10 +51,11 @@ function FindPath(start_x, start_y, goal_x, goal_y, smooth, custom_solver, node_
 		get_neighbors_func = Path_Find.get_neighbors_func,
 		get_cost = Path_Find.get_cost,
 		is_goal = Path_Find.is_goal,
+		max_count =  Max_path_length,
 	}
-	local path,nodes = logger:func(CreatePath,{config,AStar},{
+	local path,nodes = logger:func(AStar,{config},{
 		current_fore = logger.current_fore + 1,
-        current_pos =  "CreatePath"
+        current_pos =  "AStar"
 	})
 	-- 路径查找失败
 	if (path == nil) then
@@ -73,9 +66,6 @@ function FindPath(start_x, start_y, goal_x, goal_y, smooth, custom_solver, node_
 	-- 不需要平滑则返回原始路径
 	return path, nodes
 end
-
-
-
 function Path_Find.get_node_key(node)
     return string.format("%.0f_%.0f",node.x,node.y)
 end
@@ -143,3 +133,5 @@ function Path_Find.is_goal(node,goal)
 	local dist =  ( goal.x  -node.x ) ^ 2 + ( goal.y - node.y ) ^ 2 
 	return dist<=grid_density^2
 end
+
+return FindPath.find
