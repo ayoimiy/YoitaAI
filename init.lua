@@ -83,6 +83,7 @@ local frame_counter = 0
 local path_old,nodes_finded_old 
 
 local Kick  = dofile_once(base_file .. "files/scripts/action/kick.lua" ) 
+local memory = dofile_once(base_file .. "files/scripts/memory/manager.lua")
 function OnWorldPreUpdate() 
     
     sTout:Loop()
@@ -103,31 +104,42 @@ function OnWorldPreUpdate()
     end
     if InputIsKeyJustDown(18) then
         -- controls.mButtonDownLeftClick = true
-        Kick.Kick_book(Player,sTout)            
+        -- Kick.Kick_book(Player,sTout)            
+        
+        --测试记忆系统
+        local components = Floor_fill(1,0)[2]
+    
+        local nodes = {}
+        for k,v in pairs(components) do 
+            local cx,cy = k:match("(%d+)_(%d+)")
+            table.insert(nodes,{x = cx,y = cy})
+        end
+        GamePrint("节点数量:"..#nodes)
+        path_old = nodes
     end
-  
+    Display_pos_table(path_old)
 
     Display_path(path_old,nodes_finded_old)
     local mx_screen,my_screen  = Player:get_mouse_pos_in_screen(gui)
     local mx,my = Player:get_mouse_pos()
     local x,y = Player:get_pos()
-    if GuiButton(gui,1145,mx_screen,my_screen,"aa    ") then
-        -- 返回节点路径
-        local path, nodes_finded=logger:func(FindPath,
-            {x, y, mx, my, false,nil,nil,logger}
-            ,{
-                current_fore = logger.current_fore + 1,
-                current_pos =  "FindPath",                               
-        })   
-        path = path or {}
-        move:get_path(path)            
+    -- if GuiButton(gui,1145,mx_screen,my_screen,"aa    ") then
+    --     -- 返回节点路径
+    --     local path, nodes_finded=logger:func(FindPath,
+    --         {x, y, mx, my, false,nil,nil,logger}
+    --         ,{
+    --             current_fore = logger.current_fore + 1,
+    --             current_pos =  "FindPath",                               
+    --     })   
+    --     path = path or {}
+    --     move:get_path(path)            
 
-        path_old = path
-        nodes_finded_old = nodes_finded
-    else
-        --开始寻路
-        move:start(Player)
-    end
+    --     path_old = path
+    --     nodes_finded_old = nodes_finded
+    -- else
+    --     --开始寻路
+    --     move:start(Player)
+    -- end
     
     -- 显示现在的值？
     GuiText(gui,100,220,string.format("当前位置:%.2f,%.2f",x,y))
