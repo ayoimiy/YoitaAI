@@ -16,7 +16,7 @@ local logger = Logger:new({
 })
 logger:start()
 
-local FindPath = dofile_once(base_file .. "files/scripts/movements/ai_movement_utilities.lua")
+-- local FindPath = dofile_once(base_file .. "files/scripts/movements/ai_movement_utilities.lua")
 local move = dofile_once(base_file .. "files/scripts/action/move.lua")
 
 function OnPlayerSpawned(entity)
@@ -83,7 +83,7 @@ local frame_counter = 0
 local path_old,nodes_finded_old 
 
 local Kick  = dofile_once(base_file .. "files/scripts/action/kick.lua" ) 
-local memory = dofile_once(base_file .. "files/scripts/memory/manager.lua")
+local FindPath = dofile_once(base_file .. "files/scripts/memory/FindPath.lua")
 function OnWorldPreUpdate() 
     
     sTout:Loop()
@@ -94,28 +94,39 @@ function OnWorldPreUpdate()
         gui = GuiCreate()
     end
 
+
+    --寻路启动！
+
+
        
     if not Player or not Player:is_living() then return nil end 
     local controls = Player:controls_comp()
    
+    
+    FindPath:update(Player)
+
+
     -- 按p设置
     if InputIsKeyJustDown(19) then
         controls.enabled = not controls.enabled 
     end
     if InputIsKeyJustDown(18) then
+        FindPath.is_finding = not FindPath.is_finding
+
+
         -- controls.mButtonDownLeftClick = true
         -- Kick.Kick_book(Player,sTout)            
         
         --测试记忆系统
-        local components = Floor_fill(1,0)[2]
+        -- local components = Floor_fill(1,0)[2]
     
-        local nodes = {}
-        for k,v in pairs(components) do 
-            local cx,cy = k:match("(%d+)_(%d+)")
-            table.insert(nodes,{x = cx,y = cy})
-        end
-        GamePrint("节点数量:"..#nodes)
-        path_old = nodes
+        -- local nodes = {}
+        -- for k,v in pairs(components) do 
+        --     local cx,cy = k:match("(%d+)_(%d+)")
+        --     table.insert(nodes,{x = cx,y = cy})
+        -- end
+        -- GamePrint("节点数量:"..#nodes)
+        -- path_old = nodes
     end
     Display_pos_table(path_old)
 

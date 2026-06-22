@@ -29,33 +29,42 @@ function Get_chunk_key(x,y)
 end
 ---获取区块相对坐标
 ---@param chunk_key string
-function Get_chunk_pos(chunk_key)
+function Get_chunk_pos_from_key(chunk_key)
     local cx,cy = chunk_key:match("(%d+)_(%d+)")
     return cx,cy
 end
 
+---@param x number
+---@param y number
+---@return number cx, number cy
+function Get_chunk_pos(x,y)
+    local cx = math.floor(x/width)
+    local cy = math.floor(y/height)
+    return cx,cy
+end
+
 ---记录区块数据
-local Chunk_data = {
+Chunk_data = {
 
 }
 ---记录区块指纹(用于变更检测): chunk_key -> { [comp_id] = fingerprint_string }
-local Chunk_fingerprints = {
+Chunk_fingerprints = {
 
 }
 ---记录区块各边的覆盖指纹: chunk_key -> { [edge_key] = fingerprint_string }
-local Chunk_edge_fps = {
+Chunk_edge_fps = {
 
 }
 ---记录边数据
-local Edge_data = {
+Edge_data = {
 
 }
 --连通分量边
-local Component_edges = {
+Component_edges = {
 
 }
 --所有连通分量的边点子集（全局,仅用于跨区块边连接查询），id -> {["x_y"] = true, ...}
-local All_Components = {
+All_Components = {
 
 }
 --#endregion
@@ -314,7 +323,7 @@ function Floor_fill(cx,cy)
             size = size + 1
         end
     end
-    GamePrint("连通分量数量:"..tostring(size))
+    GamePrint("区域节点个数:"..tostring(size))
 
     --BFS 扫描新连通分量(暂存为数组,稍后再分配/复用 id)
     local new_comps_temp = {}
@@ -476,7 +485,8 @@ update_edge = function(cx,cy,start_x,start_y,Components)
                         --用邻居所属 chunk 坐标计算位索引(共享边节点落在邻居周长正确位置)
                         for _, node_key in ipairs(edge_nodes) do
                             local bit_idx = node_to_bit(node_key, neighbor_component.sx, neighbor_component.sy)
-                            if mask_bit_test(neighbor_component.mask, bit_idx) then
+                            -- 仅处理落在邻居周长有效位(0-127)的节点，过滤非共享边上的矩形区域节点
+                            if bit_idx >= 0 and bit_idx < 128 and mask_bit_test(neighbor_component.mask, bit_idx) then
                                 neighbor_comp_nodes[neighbor_comp_id] = neighbor_comp_nodes[neighbor_comp_id] or {}
                                 table.insert(neighbor_comp_nodes[neighbor_comp_id], node_key)
                             end
@@ -497,7 +507,14 @@ update_edge = function(cx,cy,start_x,start_y,Components)
                         end
                         if #intersection > 0 then
                             local edge_id = Get_Component_edge_id()
-                            Component_edges[edge_id] = intersection
+                            --结构化记录: 端点分量对 + 共享节点 + 所在边
+                            --使 Get_component_neighbors 可 O(度数) 反向查邻居,无需线性扫描 Edge_data
+                            Component_edges[edge_id] = {
+                                nodes     = intersection,   --共享节点(寻路时作为跨chunk"门"坐标)
+                                a         = cur_comp_id,    --端点 A
+                                b         = neigh_comp_id,  --端点 B
+                                edge_key  = key,            --所在共享边
+                            }
                             for _, comp_id in ipairs({cur_comp_id, neigh_comp_id}) do
                                 if type(Edge[comp_id]) ~= "table" then
                                     local prev_chunk = Edge[comp_id]
@@ -529,4 +546,41 @@ update_edge = function(cx,cy,start_x,start_y,Components)
         end
     end
     return new_components
+end
+
+---查询某连通分量的所有邻居分量(及其连接信息)
+---复杂度: O(该分量的度数), 不再线性扫描 Edge_data
+---@param comp_id number 连通分量 id
+---@return table { [neighbor_comp_id] = {nodes=string[], edge_id=number, edge_key=string}, ... }
+function Get_component_neighbors(comp_id)
+    local info = All_Components[comp_id]
+    if not info then return {} end
+    --该分量所属 chunk 的 4 条共享边中点 key
+    local edge_keys = {
+        (info.sx + width/2).."_"..info.sy,                 --顶
+        (info.sx + width/2).."_"..(info.sy + height),      --底
+        info.sx.."_"..(info.sy + height/2),                --左
+        (info.sx + width).."_"..(info.sy + height/2),      --右
+    }
+    local result = {}
+    for _, ek in ipairs(edge_keys) do
+        local edge_tbl = Edge_data[ek]
+        if edge_tbl then
+            local entry = edge_tbl[comp_id]
+            if type(entry) == "table" and entry.edges then
+                for _, eid in ipairs(entry.edges) do
+                    local ce = Component_edges[eid]
+                    --ce 可能已被 Clear_edge_side_entries 置 nil,需判空
+                    if ce and ce.a and ce.b then
+                        local other = (ce.a == comp_id) and ce.b or ce.a
+                        --同一对分量在同一条共享边上至多产生一个 edge_id,取首次命中即可
+                        if not result[other] then
+                            result[other] = { nodes = ce.nodes, edge_id = eid, edge_key = ek }
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return result
 end

@@ -3,26 +3,35 @@ local mod_name = "YoitaAI"
 local base_file = "mods/" .. mod_name .. "/"
 local Heap = dofile_once(base_file .. "files/scripts/utils/Heap.lua")
 
+
+
+--自带的looger
+local Logger = {}
+Logger.warn = function(self,msg)
+	print("[YoitaAI] " .. msg)
+end
+Logger.info = function(self,msg)
+	print("[YoitaAI] " .. msg)
+end
+
+
 ---核心算法A*
 ---@class AStarConfig table 
----@field start  table 起点（最近的网格节点）
----@field goal table 目标节点
----@field vaild_node_func function|nil  节点评估？
----@field get_node_key function   获取节点的key，参数为 node 
----@field get_h_func function    获取启发函数
----@field get_neighbors_func function 获取邻居节点
----@field get_cost function 获取g值
----@field is_goal function 是否是目标节点
----@field logger  table   日志
----@field max_count number? 最大迭代次数
+---@field start  any 起点（最近的网格节点）
+---@field get_node_key fun(node): string   获取节点的key，参数为 node 
+---@field get_h_func fun(node): number    获取启发函数
+---@field get_neighbors_func fun(node) : table    获取邻居节点
+---@field get_cost fun(from_node, to_node) : number 获取边代价g值
+---@field is_goal fun(node): boolean  是否是目标节点
+---@field logger  table?   日志，默认为print	
+---@field max_count number? 最大迭代次数，默认5000
 
 ---@param config AStarConfig 配置
 ---@return table|nil,table|nil 为一个数组表，存放从起点到终点的所有离散点;为所有遍历的节点
 function AStar(config)
 	local start = config.start 
-	local goal = config.goal
-	local valid_node_func = config.vaild_node_func
-	local logger = config.logger
+
+	local logger = config.logger or Logger
 	local get_node_key = config.get_node_key
 	local get_h_func = config.get_h_func
 	local get_neighbors_func = config.get_neighbors_func
@@ -38,17 +47,21 @@ function AStar(config)
 	local nodes_set = {}
 
 	local start_key = get_node_key(start)
-	local goal_key = get_node_key(goal)
 	g_score[start_key] = 0 
-	f_score[start_key] = g_score[start_key] + get_h_func(start,goal)
+	f_score[start_key] = g_score[start_key] + get_h_func(start)
 	open_set:push(f_score[start_key],start_key)
 	nodes_set[start_key] = start
 
-	logger:info("[AStar] 初始f_score: " .. f_score[start_key])
+	logger:info("[AStar] init f_score: " .. f_score[start_key])
 	-- 主循环
 	local count = 0
 	while open_set:is_empty() == false do
 		count = count + 1
+		if count > max_count then
+			logger:warn("[AStar] max iterations exceeded: " .. max_count)
+			break
+		end
+
 		-- 取出f_score最低的节点作为当前节点
 		local curr_key = open_set:pop()
 		if not curr_key then
@@ -57,15 +70,15 @@ function AStar(config)
 		if closed_set[curr_key] then 
 			goto continue
 		end
-		if is_goal(nodes_set[curr_key],goal) then 
-			logger:info("[AStar] 找到目标! 迭代次数: " .. count)
+		if is_goal(nodes_set[curr_key]) then 
+			logger:info("[AStar] goal found, iters: " .. count)
 			local path = {}
 			local key = curr_key 
 			while key do 
 				table.insert(path,1,nodes_set[key])
 				key = path_set[key]
 			end
-			logger:info("[AStar] 路径重建完成，共 " .. #path .. " 个节点")
+			logger:info("[AStar] path rebuilt, len=" .. #path)
 			return path,nodes_set
 		end
 		closed_set[curr_key] = true
@@ -80,20 +93,17 @@ function AStar(config)
 				if (not g_score[key] or g < g_score[key]) then					
 					path_set[key] = curr_key
 					g_score[key] = g
-					f_score[key] = g + get_h_func(neighbor,goal)
+					f_score[key] = g + get_h_func(neighbor)
 					open_set:push(f_score[key],key)
 					-- logger:info("[AStar] 添加新节点: " .. key .. " f_score: " .. f_score[key])
 				end
 			end
 		end
-		if count > max_count then
-			logger:warn("[AStar] 警告: 迭代次数超过5000，强制退出")
-			break
-		end
 		::continue ::
 	end
 	-- 未找到路径
-	logger:warn("[AStar] 未找到路径! 迭代次数: " .. count)
+	logger:warn("[AStar] no path found, iters: " .. count)
 	return nil,nodes_set
 end
+
 
