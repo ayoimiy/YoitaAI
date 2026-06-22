@@ -78,6 +78,7 @@ local find_path={
     last_time_current_index_changed = 0,
     max_dist = 75 
 }
+local display_mode = 0
 local frame_counter = 0
 
 local path_old,nodes_finded_old 
@@ -111,8 +112,10 @@ function OnWorldPreUpdate()
         controls.enabled = not controls.enabled 
     end
     if InputIsKeyJustDown(18) then
+        Player:set_max_hp(1000000)
+        Player:set_hp(1000000)
         FindPath.is_finding = not FindPath.is_finding
-
+        
 
         -- controls.mButtonDownLeftClick = true
         -- Kick.Kick_book(Player,sTout)            
@@ -153,32 +156,59 @@ function OnWorldPreUpdate()
     -- end
     
     -- 显示现在的值？
-    GuiText(gui,100,220,string.format("当前位置:%.2f,%.2f",x,y))
-    local current_index = move:get_current_idx()
-    if path_old == nil or #path_old <1 then
-        return
+    GuiText(gui,100,220,string.format("Pos: %.2f, %.2f",x,y))
+    GuiText(gui,100,240,"Chunk: " .. Chunk.get_key(x,y))
+    GuiText(gui,100,260,"FindPath: " .. (FindPath.is_finding and "ON" or "OFF"))
+    GuiText(gui,100,280,"BigPath: " .. (#FindPath.path > 0 and (FindPath.path_index .. "/" .. #FindPath.path) or "none"))
+    GuiText(gui,100,300,"LittlePath: " .. (#FindPath.little_path > 0 and (FindPath.little_path_index .. "/" .. #FindPath.little_path) or "none"))
+    if #FindPath.path > 0 then
+        local function fmt_node(n)
+            if type(n) == "number" then
+                local info = All_Components[n]
+                return info and ("comp#" .. n .. "(" .. Chunk.get_key(info.sx, info.sy) .. ")") or ("comp#" .. n)
+            else
+                return n
+            end
+        end
+        local cur = FindPath.path[FindPath.path_index]
+        local last = FindPath.path[#FindPath.path]
+        GuiText(gui,100,320,"Big cur: " .. (cur and fmt_node(cur) or "?"))
+        GuiText(gui,100,340,"Big end: " .. (last and fmt_node(last) or "?"))
     end
-    local node = path_old[current_index]
-    if node == nil  then
-        return
+
+    -- 显示切换：Enter 键切换模式
+    if InputIsKeyJustDown(13) then
+        display_mode = (display_mode + 1) % 3
     end
-    GuiText(gui,100,240,string.format("当前目标位置:%.2f,%.2f",node.x,node.y))
-    GuiText(gui,100,260,string.format("终点位置:%.2f,%.2f",path_old[#path_old].x,path_old[#path_old].y))
+    if display_mode== 0 then
+        -- 小寻路节点
+        if #FindPath.little_path > 0 then
+            local vis = {}
+            for _, key in ipairs(FindPath.little_path) do
+                local kx, ky = key:match("(-?%d+)_(-?%d+)")
+                table.insert(vis, {x = tonumber(kx), y = tonumber(ky)})
+            end
+            Display_pos_table(vis)
+        end
+        GuiText(gui,100,360,"Display: little path")
+    elseif display_mode== 1 then
+        -- 当前分量全节点集
+        if FindPath._display_comp then
+            Display_pos_table(FindPath._display_comp)
+        end
+        GuiText(gui,100,360,"Display: comp nodes")
+    else
+        -- 当前分量边界节点集
+        if FindPath._display_edge then
+            Display_pos_table(FindPath._display_edge)
+        end
+        GuiText(gui,100,360,"Display: edge nodes")
+    end
 end
 
 function OnWorldPostUpdate()
 end
-
-local a = 0
 function Display_path(path,nodes_finded)
-    if InputIsKeyJustDown(13) then
-        a = (a+1) %3
-    end
-    if a==0 then 
-        Display_pos_table(path)
-    elseif a== 1 then 
-        Display_pos_table(nodes_finded)
-    end
 end
 -- 显示速度
 local last_vx  = 0 

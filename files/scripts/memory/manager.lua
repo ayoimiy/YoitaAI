@@ -17,31 +17,9 @@ function Get_Component_edge_id()
     return Component_edge_id
 end
 
---获取区块key   
----@param x number
----@param y number
----@return string chunk_key 区块key
-function Get_chunk_key(x,y)
-    local cx = math.floor(x/width)
-    local cy = math.floor(y/height)
-    local chunk_key = tostring(cx).."_"..tostring(cy)
-    return chunk_key
-end
----获取区块相对坐标
----@param chunk_key string
-function Get_chunk_pos_from_key(chunk_key)
-    local cx,cy = chunk_key:match("(%d+)_(%d+)")
-    return cx,cy
-end
 
----@param x number
----@param y number
----@return number cx, number cy
-function Get_chunk_pos(x,y)
-    local cx = math.floor(x/width)
-    local cy = math.floor(y/height)
-    return cx,cy
-end
+
+
 
 ---记录区块数据
 Chunk_data = {
@@ -68,6 +46,73 @@ All_Components = {
 
 }
 --#endregion
+
+--#region 对象
+
+local function class()
+    local _class = {}
+    _class.__index = _class
+    _class.__newindex = function (t,key,value)
+        if rawget(_class,key) ~= nil then
+            error("Cannot assign to a read-only field")
+        else
+            rawset(t,key,value)
+        end      
+    end
+    _class.new = function (self,...)
+        local obj = setmetatable({},_class)
+        if obj.init then obj:init(...) end
+        return obj
+    end
+    return _class
+end
+---节点 key -> 周长位索引 (0..127)
+---周长线性化(128位): 顶边(0..32) | 右边去顶角(33..64) | 底边去右角(65..96) | 左边去底角和顶角(97..127)
+---@param key string "x_y"
+---@param start_x number 区块起始x
+---@param start_y number 区块起始y
+---@return number bit_index 0..127
+local function node_to_bit(key, start_x, start_y)
+    local nx, ny = key:match("(-?%d+)_(-?%d+)")
+    nx, ny = tonumber(nx), tonumber(ny)
+    local end_x = start_x + width
+    local end_y = start_y + height
+    if ny == start_y and nx >= start_x and nx <= end_x then
+        return (nx - start_x) / node_size               --顶边 0..32
+    elseif nx == end_x and ny >= start_y and ny <= end_y then
+        return 32 + (ny - start_y) / node_size           --右边 33..64
+    elseif ny == end_y and nx >= start_x and nx <= end_x then
+        return 64 + (end_x - nx) / node_size             --底边 65..96
+    elseif nx == start_x and ny >= start_y and ny <= end_y then
+        return 96 + (end_y - ny) / node_size             --左边 97..127
+    end
+    return -1   --非周长节点
+end
+
+---边点子集 -> 16 字节二进制位掩码(128位周长)
+---@param edge_set table { [node_key] = true }
+---@param start_x number 区块起始x
+---@param start_y number 区块起始y
+---@return string 16 字节二进制串
+local function edge_set_to_mask(edge_set, start_x, start_y)
+    local bytes = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}
+    for key in pairs(edge_set) do
+        local bit_idx = node_to_bit(key, start_x, start_y)
+        if bit_idx >= 0 and bit_idx < 128 then   --守卫:跳过非周长节点
+            local byte_idx = math.floor(bit_idx / 8) + 1
+            local bit_in_byte = bit_idx % 8
+            bytes[byte_idx] = bytes[byte_idx] + (2 ^ bit_in_byte)
+        end
+    end
+    return string.char(bytes[1],bytes[2],bytes[3],bytes[4],
+                       bytes[5],bytes[6],bytes[7],bytes[8],
+                       bytes[9],bytes[10],bytes[11],bytes[12],
+                       bytes[13],bytes[14],bytes[15],bytes[16])
+end
+
+
+
+
 
 --@region 连通分量检测
 
@@ -127,46 +172,7 @@ local function bfs(nodes,start_node)
     return Component
 end
 
----节点 key -> 周长位索引 (0..127)
----周长线性化(128位): 顶边(0..32) | 右边去顶角(33..64) | 底边去右角(65..96) | 左边去底角和顶角(97..127)
----@param key string "x_y"
----@param start_x number 区块起始x
----@param start_y number 区块起始y
----@return number bit_index 0..127
-local function node_to_bit(key, start_x, start_y)
-    local nx, ny = key:match("(-?%d+)_(-?%d+)")
-    nx, ny = tonumber(nx), tonumber(ny)
-    local end_x = start_x + width
-    local end_y = start_y + height
-    if ny == start_y then
-        return (nx - start_x) / node_size               --顶边 0..32
-    elseif nx == end_x then
-        return 32 + (ny - start_y) / node_size           --右边 33..64
-    elseif ny == end_y then
-        return 64 + (end_x - nx) / node_size             --底边 65..96
-    else  --nx == start_x
-        return 96 + (end_y - ny) / node_size             --左边 97..127
-    end
-end
 
----边点子集 -> 16 字节二进制位掩码(128位周长)
----@param edge_set table { [node_key] = true }
----@param start_x number 区块起始x
----@param start_y number 区块起始y
----@return string 16 字节二进制串
-local function edge_set_to_mask(edge_set, start_x, start_y)
-    local bytes = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}
-    for key in pairs(edge_set) do
-        local bit_idx = node_to_bit(key, start_x, start_y)
-        local byte_idx = math.floor(bit_idx / 8) + 1
-        local bit_in_byte = bit_idx % 8
-        bytes[byte_idx] = bytes[byte_idx] + (2 ^ bit_in_byte)
-    end
-    return string.char(bytes[1],bytes[2],bytes[3],bytes[4],
-                       bytes[5],bytes[6],bytes[7],bytes[8],
-                       bytes[9],bytes[10],bytes[11],bytes[12],
-                       bytes[13],bytes[14],bytes[15],bytes[16])
-end
 
 ---测试位掩码中某位是否被置位
 ---@param mask string 16 字节二进制串
@@ -307,6 +313,7 @@ local update_edge  --前向声明(定义在 Floor_fill 之后)
 ---@param cx number
 ---@param cy number
 function Floor_fill(cx,cy)
+    ---将区块转化为可用点集合
     local nodes = {}
     local start_x = cx * width
     local start_y = cy * height
@@ -404,7 +411,7 @@ function Floor_fill(cx,cy)
         update_edge(cx, cy, start_x, start_y, Components)
     end
 
-    return Components
+    return Components, all_matched
 end
 
 update_edge = function(cx,cy,start_x,start_y,Components)
@@ -419,11 +426,27 @@ update_edge = function(cx,cy,start_x,start_y,Components)
         local y = start_y + v[2]
         local key = x.."_"..y
 
-        --得到本端在边上的节点集
+        --得到本端在边上的节点集(沿共享边 1D 遍历)
+        --v[3],v[4] 为邻居方向: 据此判定本端是哪条边(顶/底 y固定, 左/右 x固定)
         local edge_nodes = {}
-        for dx = start_x,x,node_size do
-            for dy = start_y,y,node_size do
-                local edge_node_key = dx.."_"..dy
+        local ndx, ndy = v[3], v[4]
+        if ndy ~= 0 then
+            --顶/底边: y 固定, x 沿 width 方向遍历
+            local fixed_y = start_y + (ndy < 0 and 0 or height)
+            for fx = start_x, start_x + width, node_size do
+                local edge_node_key = fx.."_"..fixed_y
+                for _,component in pairs(Components) do
+                    if component[edge_node_key] ~= nil then
+                        table.insert(edge_nodes, edge_node_key)
+                        break
+                    end
+                end
+            end
+        else
+            --左/右边: x 固定, y 沿 height 方向遍历
+            local fixed_x = start_x + (ndx < 0 and 0 or width)
+            for fy = start_y, start_y + height, node_size do
+                local edge_node_key = fixed_x.."_"..fy
                 for _,component in pairs(Components) do
                     if component[edge_node_key] ~= nil then
                         table.insert(edge_nodes, edge_node_key)

@@ -55,9 +55,15 @@ FindPath.max_dist = 75   -- 最大容忍距离
 FindPath._components = nil  -- 当前区块的连通分量集缓存
 FindPath.is_finding = false  -- 是否启用寻路
 FindPath.cur_chunk = nil     -- 当前所在区块 key
+FindPath._chunk_changed = false  -- 同 chunk 内地形是否变化(由 Floor_fill 设置)
+FindPath._scan_frame_counter = 0  -- 强制重扫节流计数器
 
 -- 网格对齐常量，与 manager.lua 保持一致
 local NODE_SIZE = 8
+-- 同 chunk 内强制重扫帧间隔(约0.5秒),用于检测地形变化
+local SCAN_INTERVAL = 30
+-- chunk 尺寸常量，与 manager.lua 保持一致
+local CHUNK_W, CHUNK_H = 256, 256
 
 -- 获取玩家所在的连通分量 id
 ---@param player Player
@@ -68,13 +74,16 @@ function FindPath:get_player_component(player)
         return nil
     end
 
-    local ccx, ccy = Get_chunk_pos(x, y)
+    local ccx, ccy = Chunk.get_pos(x, y)
     local chunk_key = ccx .. "_" .. ccy
 
-    -- 区块变化时才重新 Floor_fill
-    if self.last_chunk_key ~= chunk_key then
-        self._components = Floor_fill(ccx, ccy)
+    -- 区块变化 或 节流到时 才重新 Floor_fill(检测同 chunk 内地形变化)
+    if self.last_chunk_key ~= chunk_key or self._scan_frame_counter <= 0 then
+        local comps, unchanged = Floor_fill(ccx, ccy)
+        self._components = comps
+        self._chunk_changed = not unchanged
         self.last_chunk_key = chunk_key
+        self._scan_frame_counter = SCAN_INTERVAL
     end
 
     if not self._components then
@@ -89,6 +98,39 @@ function FindPath:get_player_component(player)
     -- 查找该节点属于哪个分量
     for comp_id, comp in pairs(self._components) do
         if comp[node_key] then
+            -- 填充调试显示：分量全节点集
+            local vis_comp = {}
+            for k in pairs(comp) do
+                local kx, ky = k:match("(-?%d+)_(-?%d+)")
+                table.insert(vis_comp, {x = tonumber(kx), y = tonumber(ky)})
+            end
+            self._display_comp = vis_comp
+            -- 填充调试显示：分量边界节点集（mask 四条边全扫描）
+            local vis_edge = {}
+            local c_info = All_Components[comp_id]
+            if c_info then
+                local ex, ey = c_info.sx + CHUNK_W, c_info.sy + CHUNK_H
+                for _, eo in ipairs({{1,"top"},{5,"right"},{9,"bottom"},{13,"left"}}) do
+                    local bs, en = eo[1], eo[2]
+                    for b = 0, 3 do
+                        local bv = string.byte(c_info.mask, bs + b)
+                        if bv ~= 0 then
+                            for bit_in_byte = 0, 7 do
+                                if math.floor(bv / (2 ^ bit_in_byte)) % 2 == 1 then
+                                    local bit = (bs - 1 + b) * 8 + bit_in_byte
+                                    local ex2, ey2
+                                    if en == "top" then ex2, ey2 = c_info.sx + bit * NODE_SIZE, c_info.sy
+                                    elseif en == "right" then ex2, ey2 = ex, c_info.sy + (bit - 32) * NODE_SIZE
+                                    elseif en == "bottom" then ex2, ey2 = ex - (bit - 64) * NODE_SIZE, ey
+                                    else ex2, ey2 = c_info.sx, ey - (bit - 96) * NODE_SIZE end
+                                    table.insert(vis_edge, {x = ex2, y = ey2})
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            self._display_edge = vis_edge
             return comp_id
         end
     end
@@ -109,7 +151,7 @@ FindPath.Find = function (start_id)
         return nil
     end
     local start_info = All_Components[start_id]
-    local cx, cy = Get_chunk_pos(start_info.sx, start_info.sy)
+    local cx, cy = Chunk.get_pos(start_info.sx, start_info.sy)
     ---@type AStarConfig
     local config = {
         start = start_id,
@@ -125,7 +167,7 @@ FindPath.Find = function (start_id)
             if type(node) == "number" then
                 local comp_info = All_Components[node]
                 if comp_info then
-                    local _, ccy = Get_chunk_pos(comp_info.sx, comp_info.sy)
+                    local _, ccy = Chunk.get_pos(comp_info.sx, comp_info.sy)
                     return math.max(0, cy - ccy)
                 end
             elseif type(node) == "string" then
@@ -148,7 +190,7 @@ FindPath.Find = function (start_id)
                         table.insert(neighbors, neighbor_id)
                     end
                     -- 未探索的相邻区块：仅在分量接触该边时才可达
-                    local ccx, ccy = Get_chunk_pos(comp_info.sx, comp_info.sy)
+                    local ccx, ccy = Chunk.get_pos(comp_info.sx, comp_info.sy)
                     -- mask 128位 = 16字节, 四边各4字节: 顶1-4, 右5-8, 底9-12, 左13-16
                     local edge_dirs = {
                         {dx = 0,  dy = -1, byte_start = 1},   -- 上
@@ -194,7 +236,7 @@ FindPath.Find = function (start_id)
         for i, node in ipairs(path) do
             if type(node) == "number" then
                 local info = All_Components[node]
-                local ck = info and Get_chunk_key(info.sx, info.sy) or "?"
+                local ck = info and Chunk.get_key(info.sx, info.sy) or "?"
                 parts[i] = "comp#" .. node .. "(" .. ck .. ")"
             else
                 parts[i] = node .. "(unexplored)"
@@ -216,7 +258,6 @@ end
 
 
 -- chunk 尺寸常量，与 manager.lua 保持一致
-local CHUNK_W, CHUNK_H = 256, 256
 
 -- mask → 坐标：将指定边上第一个置位节点转为 {x,y}
 local function mask_edge_to_pos(mask, sx, sy, byte_start, edge_name)
@@ -245,14 +286,14 @@ end
 
 -- mask → 目标边全部节点集 { ["x_y"] = true }，供小 find 的多目标寻路
 ---@param comp_id number 当前分量id
----@param target_chunk_key string 未探索区块key
+---@param tarChunk.get_key string 未探索区块key
 ---@return table|nil
-function FindPath:_edge_nodes_set(comp_id, target_chunk_key)
+function FindPath:_edge_nodes_set(comp_id, tarChunk.get_key)
     local comp_info = All_Components[comp_id]
     if not comp_info then return nil end
 
-    local ccx, ccy = Get_chunk_pos(comp_info.sx, comp_info.sy)
-    local tcx, tcy = target_chunk_key:match("(-?%d+)_(-?%d+)")
+    local ccx, ccy = Chunk.get_pos(comp_info.sx, comp_info.sy)
+    local tcx, tcy = tarChunk.get_key:match("(-?%d+)_(-?%d+)")
     tcx, tcy = tonumber(tcx), tonumber(tcy)
     if not (tcx and tcy) then return nil end
 
@@ -312,7 +353,7 @@ function FindPath:_step_target(curr, next_node)
         -- 分量 → 未探索区块：取分量在该边上的第一个节点
         local comp_info = All_Components[curr]
         if comp_info then
-            local ccx, ccy = Get_chunk_pos(comp_info.sx, comp_info.sy)
+            local ccx, ccy = Chunk.get_pos(comp_info.sx, comp_info.sy)
             local tcx, tcy = next_node:match("(-?%d+)_(-?%d+)")
             tcx, tcy = tonumber(tcx), tonumber(tcy)
             if tcx and tcy then
@@ -491,7 +532,7 @@ function FindPath:move(player)
     -- 越界推力：小路径走完后推玩家跨过区块边界
     if self._push_target then
         move(player, self._push_target)
-        local cur_ck = Get_chunk_key(x, y)
+        local cur_ck = Chunk.get_key(x, y)
         local pd = (x - self._push_target.x) ^ 2 + (y - 4 - self._push_target.y) ^ 2
         if cur_ck ~= self.cur_chunk or pd < NODE_SIZE * 2 ^ 2 then
             self._push_target = nil
@@ -516,17 +557,30 @@ function FindPath:move(player)
                         target_set[k] = true
                     end
                 end
+                if target_set then
+                    print("[YoitaAI] gen little path: comp " .. curr .. " -> comp " .. next_node .. ", doors=" .. #edge.nodes)
+                end
             else
                 -- 面向未探索区块的边上所有周长节点
                 target_set = self:_edge_nodes_set(curr, next_node)
+                if target_set then
+                    local n = 0
+                    for _ in pairs(target_set) do n = n + 1 end
+                    print("[YoitaAI] gen little path: comp " .. curr .. " -> unexplored " .. next_node .. ", doors=" .. n)
+                end
             end
             if target_set then
                 local ok, p = self:find(comp_nodes, target_set)
                 if ok and p then
                     self.little_path = p
                     self.little_path_index = 1
+                    print("[YoitaAI] little path found, len=" .. #p .. " path: " .. table.concat(p, " -> "))
+                else
+                    print("[YoitaAI] little path NOT found")
                 end
             end
+        else
+            print("[YoitaAI] no comp_nodes for curr=" .. curr .. ", waiting for chunk update")
         end
     end
 
@@ -564,6 +618,7 @@ function FindPath:move(player)
                         end
                     end
                     self._push_target = {x = push_x, y = push_y}
+                    print("[YoitaAI] push target set (" .. push_x .. "," .. push_y .. ")")
                 end
                 self.little_path = {}
                 self.little_path_index = 0
@@ -588,12 +643,16 @@ function FindPath:update(player)
         return
     end
 
-    local cur_chunk = Get_chunk_key(x, y)
+    local cur_chunk = Chunk.get_key(x, y)
 
-    -- 区块变化 或 路径已走完（且上次未失败）→ 重新规划
-    if cur_chunk ~= self.cur_chunk or (#self.path == 0 and not self._find_failed) then
+    -- 每帧递减节流计数器,并刷新连通分量(内部按计数器节流 Floor_fill)
+    self._scan_frame_counter = self._scan_frame_counter - 1
+    local comp_id = self:get_player_component(player)
+
+    -- 区块变化 或 地形变化 或 路径走完（且上次未失败）→ 重新规划
+    if cur_chunk ~= self.cur_chunk or self._chunk_changed or (#self.path == 0 and not self._find_failed) then
         self.cur_chunk = cur_chunk
-        local comp_id = self:get_player_component(player)
+        self._chunk_changed = false  -- 消费标志
         if comp_id then
             self.Find(comp_id)
         end
