@@ -512,7 +512,9 @@ local function floor_fill(x,y)
     --创建新block: 未匹配到旧block的新连通分量; 匹配上的复用旧 id
     local new_block_ids = {}
 
-    for i,_ in ipairs(comps) do
+
+    --刷新分量块，顺便匹配玩家坐标
+    for i,v in ipairs(comps) do
         local block_id
         if matched[i] then
             --匹配上的保留旧block id
@@ -523,8 +525,21 @@ local function floor_fill(x,y)
             block_id = block.id
             is_change = true
         end
+        
         new_block_ids[i] = block_id
     end
+
+    --匹配玩家坐标
+    local nx,ny = math.floor(x / Chunk.node_size) ,math.floor(y / Chunk.node_size)
+    local key = nx .. "_" .. ny
+    for i,v in ipairs(comps) do
+        if v[key] ~= nil then
+            --匹配成功
+            crr_block_id = new_block_ids[i]
+            break
+        end
+    end
+
 
     chunk.blocks = new_block_ids
 
@@ -535,6 +550,7 @@ end
 --#endregion
 
 local M = {
+    node_size = Chunk.node_size,
     Floor_fill = floor_fill,
     get_chunk_key = function (x,y)
         return Chunk.get_key(x,y)

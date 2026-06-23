@@ -50,45 +50,237 @@ local Move_no_path = function (player)
 end
 
 
-
-
-
 local Big_find = {
     path  = {},
     path_index = 0,
-    
+    curr_block_id = nil ,
+    is_finding = false,
 }
 
 
 local Small_find = {
+    path = {},
+    path_index = 0 ,
+    max_dist = 75,
+    is_finding = false,
 
 }
+
+
+
+---在连通分量图上寻路(Big_find = 粗粒度跨分量路径)
+---@return table|nil path 连通分量id数组; nil 表示无路径
 function Big_find:find()
-    --实现Astar
-
+    local start = self.curr_block_id
+    local curr_chunk_key = ME.get_block_chunk_key(start)
+    local scx,scy = curr_chunk_key:match("(-?%d+)_(-?%d+)")
     ---@type AStarConfig
-    local config= {
-        
-    
+    local config = {
+        start = start,
+
+        get_node_key = function(id)
+            return tostring(id)
+        end,
+
+        get_h_func = function(node)
+            if type(node) == "number" then
+                --使其偏好下面的区块
+                local chunk_key = ME.get_block_chunk_key(node)
+                local cx,cy = chunk_key:match("(-?%d+)_(-?%d+)")
+                return math.max(0,cy-scy)
+            elseif type(node) == "string" then
+                --直接为区块
+                local cx,cy = node:match("(-?%d+)_(-?%d+)")
+                return math.max(0,cy-scy)
+            else
+                print("[BigFind]出现异常节点")
+                return -100000
+            end
+        end,
+
+        get_neighbors_func = function(id)
+            local neighbors = ME.get_block_neighbors(id)
+            return neighbors
+        end,
+
+        get_cost = function(from_node, to_node)
+            return 1
+        end,
+
+        is_goal = function(node)
+            if type(node) == "string" then
+                return true                
+            end
+            return false
+        end,
+
+        max_count = 1000,
     }
+    local path = AStar(config)
 
+    --更新路径
+    self.path = path
+    self.path_index = 1
 
+    return path
 end
---刷新区块
-local function update(player)
-    local x,y = player:get_pos()
-    local chunk_key = ME.get_chunk_key(x,y)
-    if chunk_key ~= FM.curr_chunk_key then
-        local current_block,is_change =  ME.Floor_fill(x,y)
-        FM.curr_chunk_key = chunk_key
+function Big_find:Move(player)
+    --移动节点
+    
+    if self.path ~= nil and #self.path > 2 then
+
+        if self.path_index >= #self.path then
+            return
+        end
+      
+        --进行小寻路
+        if Small_find.is_finding == false then
+            --提取节点        
+            local from_node = self.path[self.path_index]
+            local to_node   = self.path[self.path_index + 1]
+            Small_find:find()
+            Small_find.is_finding = true
+        elseif Small_find.path == nil or #Small_find.path < 2 then
+            print("[Big_find]异常，小寻路失败")
+        end
+        
     end
 
 end
 
+function Small_find:find(sx,sy,nodes,target_nodes)
+    
+    local node_size = ME.node_size
+    ---@type AStarConfig
+    local config = {
+        start = {x = sx ,y = sy},
+
+        get_node_key = function(node)
+            return  node.x .. "_" .. node.y 
+        end,
+
+        get_h_func = function(node)
+            return 0
+        end,
+
+        get_neighbors_func = function(node)
+            local neighbors = {}
+            local t = {-1,0,1}
+            for _,dx in ipairs(t) do
+                for _,dy in ipairs(t) do
+                    if dx ~= 0 or dy ~= 0 then
+                        local x = node.x + dx * node_size
+                        local y = node.y + dy * node_size
+                        local key = x .. "_" .. y
+                        if nodes[key] ~= nil then
+                            table.insert(neighbors,{x = x, y = y })
+                        end
+                    end
+                end
+            end
+            return neighbors
+        end,
+
+        get_cost = function(from_node, to_node)
+            local loss = 0
+            if (RaytracePlatforms(from_node.x,from_node.y,to_node.x,to_node.y)) then
+                return node_size/0.00001
+            end
+            --5射线检查
+            local point= {
+                {-3, -8}, {3, -8}, {-3, 8}, {3, 8}
+            }
+            local count = 0 
+            for _,v in ipairs(point) do
+                local bx = RaytracePlatforms(from_node.x + v[1], from_node.y + v[2], to_node.x + v[1], to_node.y + v[2])
+                if bx then
+                    count = count + 1
+                end
+            end
+            --0条射线完美，1条命中可接受，2条命中难以接受，3以上无法接受
+            if count == 0 then
+                loss = 0 
+            elseif count == 1 then
+                loss = node_size / 0.5
+            elseif count == 2 then
+                loss =  node_size /0.1 
+            else
+                return node_size/0.00001
+            end 
+            --计算两个节点
+            local dx =  to_node.x - from_node.x 
+            local dy  = to_node.y -from_node.y
+            if dx == 0 or dy ==0 then 
+                return node_size + loss
+            else
+                return math.sqrt(2) * node_size + loss
+            end
+        end,
+
+        is_goal = function(node)
+            local key  = node.x .. "_" .. node.y 
+            if target_nodes[key] ~= nil then
+                return true
+            end
+            return false
+        end,
+
+        max_count = 1000,
+    }
+    
+    local path = AStar(config)
+    --更新路径
+    self.path = path
+    self.path_index = 1
+
+    return path
+end
+
+function Small_find:Move(player)
+    local x,y = player:get_pos()
+    if not (x and y) then
+        error("entity has no pos")
+    end
+    --节点移动
+    
+    if self.path == nil or #self.path < 2 or self.path_index >= #self.path  then
+        return true
+    end
+    local target = self.path[self.path_index + 1]
+    
+    move(player,target)
+
+    local dist =   (x-target.x)^2 + (y-4-target.y)^2
+    if dist < self.max_dist then
+        self.path_index = self.path_index + 1
+    end
+end
+
+
+local M = {
+    is_finding = false
+}
+--刷新区块
+function M.update(player)
+    local x,y = player:get_pos()
+    local chunk_key = ME.get_chunk_key(x,y)
+    local is_change = false
+    local components = nil
+    if chunk_key ~= FM.curr_chunk_key then
+        components,is_change = ME.Floor_fill(x,y)
+        FM.curr_chunk_key = chunk_key
+    end
+    --寻路部分
+    if M.is_finding then
+        if is_change then
+            Big_find:find()
+        end
+        Big_find:Move(player)
+    end
+end
 
 
 
 
-local M = {}
 
 return M
