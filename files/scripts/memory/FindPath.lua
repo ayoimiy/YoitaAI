@@ -4,6 +4,7 @@ local base_file = "mods/" .. mod_name .. "/"
 --Astar模块
 dofile_once(base_file .. "files/scripts/utils/astar.lua")
 --记忆模块
+---@type Manager
 local ME = dofile_once(base_file .. "files/scripts/memory/manager.lua")
 
 
@@ -15,7 +16,7 @@ local FM = {
 
 ---底层移动控制——向目标位置移动一步
 ---@param player Player 玩家实体
----@param target {x:number, y:number} 目标坐标
+---@param target table 目标坐标
 local move = function (player,target)
     local controls = player:controls_comp()
     local x,y = player:get_pos()
@@ -52,7 +53,7 @@ end
 
 
 ---@class BigFind
----@field path table<number, number|string> 连通分量路径(block_id / chunk_key)
+---@field path table<number, number|string>|nil 连通分量路径(block_id / chunk_key)
 ---@field path_index number 当前路径索引
 ---@field curr_block_id number|nil 玩家当前所在连通块id
 ---@field is_finding boolean 是否正在寻路中
@@ -65,13 +66,15 @@ local Big_find = {
     curr_block_id = nil ,
     is_finding = false,
     is_change = false,   --用于传递给小寻路模块
+    --传递给x轴小寻路模块的信息
     player_x = nil,
     player_y = nil,
+    block_nodes = nil,
 }
 
 
 ---@class SmallFind
----@field path table<number, {x:number, y:number}>|nil 节点路径
+---@field path table|nil 节点路径
 ---@field path_index number 当前路径索引
 ---@field max_dist number 到达目标点的判定距离阈值
 ---@field is_finding boolean 是否正在寻路中
@@ -90,8 +93,11 @@ local Small_find = {
 ---@return table|nil path 连通分量id数组; nil 表示无路径
 function Big_find:find()
     local start = self.curr_block_id
+    print("[Big_find]find from "..start)
     local curr_chunk_key = ME.get_block_chunk_key(start)
+    print("[Big_find]curr_chunk_key "..curr_chunk_key)
     local scx,scy = curr_chunk_key:match("(-?%d+)_(-?%d+)")
+    print("[Big_find]scx "..scx .. " scy "..scy)
     ---@type AStarConfig
     local config = {
         start = start,
@@ -135,6 +141,14 @@ function Big_find:find()
         max_count = 1000,
     }
     local path = AStar(config)
+    print("[Big_find]find path "..#path)
+    local path_str = ""
+    for i,v in ipairs(path or {}) do
+        path_str = path_str..tostring(v).."-->"
+    end
+    print("[Big_find]path "..path_str)
+
+
 
     --更新路径
     self.path = path
@@ -148,11 +162,12 @@ end
 ---取当前分量与下一分量，交给 Small_find:find() 做节点级路径规划
 ---@param player Player 玩家实体
 function Big_find:Move(player)
-    if self.path ~= nil and #self.path > 2 then
+    if self.path ~= nil and #self.path >= 2 then
 
         if self.path_index >= #self.path then
             --完美结束，即已经到达了目标点，可以进行再次寻路
             self.is_finding = false
+            print("[Big_find]find complete")
             return
         end
       
@@ -162,11 +177,18 @@ function Big_find:Move(player)
             local from_node = self.path[self.path_index]
             local to_node   = self.path[self.path_index + 1]
             --提供给小寻路信息
+            local target_nodes = ME.get_block_edge(from_node,to_node)
 
-            
+            print("[Big_find]from_node "..from_node.." to_node "..to_node)
+            local target_str = ""
+            for i,v in ipairs(target_nodes or {}) do
+                target_str = target_str..tostring(v).."-->"
+            end
+            print("[Big_find]target_nodes "..target_str)
 
 
-            Small_find:find()
+            self.block_nodes = self.block_nodes or {}
+            Small_find:find(self.player_x,self.player_y,self.block_nodes,target_nodes)
             Small_find.is_finding = true
             self.is_change = false
         elseif Small_find.path == nil or #Small_find.path < 2 then
@@ -315,26 +337,35 @@ function M.update(player)
     local chunk_key = ME.get_chunk_key(x,y)
     local is_change = false
     local curr_block_id = nil
+    local block_nodes = {}
     local pos = nil
     if chunk_key ~= FM.curr_chunk_key then
-        curr_block_id,is_change,pos = ME.Floor_fill(x,y)
+        print("[FindPath]chunk change")
+        curr_block_id,block_nodes,is_change,pos = ME.Floor_fill(x,y)
         FM.curr_chunk_key = chunk_key
+        print("[FindPath]chunk change to "..chunk_key)
         Big_find.curr_block_id = curr_block_id
+        print("[FindPath]block change to "..curr_block_id)
         Big_find.player_x = pos.x
         Big_find.player_y = pos.y
-    end
-    --寻路部分
-    if M.is_finding == false or is_change == true then
-        if is_change then
-            Big_find:find()
+        print("[FindPath]player pos change to "..pos.x..","..pos.y)
+        Big_find.block_nodes = block_nodes
+        local count = 0 
+        for k,v in pairs(block_nodes) do
+            count = count + 1
         end
-        Big_find:Move(player)
+        print("[FindPath]block nodes change to ".. count)
+    end
+    if is_change then
+        --触发区块改变，则进行寻路
+        Big_find:find()
         is_change = false
     end
+    if M.is_finding == true then
+        --如果已经寻了一次路，则进行移动
+
+        Big_find:Move(player)
+    end
 end
-
-
-
-
 
 return M

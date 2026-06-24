@@ -104,8 +104,7 @@ function OnWorldPreUpdate()
     local controls = Player:controls_comp()
    
     
-    FindPath:update(Player)
-
+    FindPath.update(Player)
 
     -- 按p设置
     if InputIsKeyJustDown(19) then
@@ -115,22 +114,16 @@ function OnWorldPreUpdate()
         Player:set_max_hp(1000000)
         Player:set_hp(1000000)
         FindPath.is_finding = not FindPath.is_finding
-        
-
-        -- controls.mButtonDownLeftClick = true
-        -- Kick.Kick_book(Player,sTout)            
-        
-        --测试记忆系统
-        -- local components = Floor_fill(1,0)[2]
-    
-        -- local nodes = {}
-        -- for k,v in pairs(components) do 
-        --     local cx,cy = k:match("(%d+)_(%d+)")
-        --     table.insert(nodes,{x = cx,y = cy})
-        -- end
-        -- GamePrint("节点数量:"..#nodes)
-        -- path_old = nodes
+        print("FindPath: " .. (FindPath.is_finding and "ON" or "OFF") )
     end
+
+
+
+    if true then return end
+
+
+
+
     Display_pos_table(path_old)
 
     Display_path(path_old,nodes_finded_old)
