@@ -117,14 +117,20 @@ function OnWorldPreUpdate()
         print("FindPath: " .. (FindPath.is_finding and "ON" or "OFF") )
     end
 
+    local x,y = Player:get_pos()
+    GuiText(gui,100,220,string.format("Pos: %.2f, %.2f",x,y  ))
+    GuiText(gui,100,240,"Chunk: " .. FindPath.get_curr_chunk_key())
+    GuiText(gui,100,260,"FindPath: " .. (FindPath.is_finding and "ON" or "OFF"))
+    -- GuiText(gui,100,280,"BigPath: " .. (#FindPath.path > 0 and (FindPath.path_index .. "/" .. #FindPath.path) or "none"))
+    GuiText(gui,100,300,"LittlePath: " .. (#FindPath.path_nodes() > 0 and (FindPath.get_index() .. "/" .. #FindPath.path_nodes()) or "none"))
 
-
+    Display_pos_table(FindPath.path_nodes())
     if true then return end
 
 
 
 
-    Display_pos_table(path_old)
+    
 
     Display_path(path_old,nodes_finded_old)
     local mx_screen,my_screen  = Player:get_mouse_pos_in_screen(gui)

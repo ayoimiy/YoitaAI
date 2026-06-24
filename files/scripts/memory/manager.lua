@@ -457,21 +457,17 @@ local function Create_new_blocks(block_fps,chunk_key)
 end
 
 
----@param x number
----@param y number
----@return  number|nil block_id,table<string,boolean> block_nodes, boolean is_change, table player_pos
-local function floor_fill(x,y)
+---@param chunk_key string 区间key
+---@return  table blocks_nodes,boolean is_change
+local function floor_fill(chunk_key)
     --获取区块
-    local chunk_key = Chunk.get_key(x,y)
     local chunk = Chunk_data[chunk_key]
     if chunk == nil then
-        local cx,cy = Chunk.get_pos(x,y)
+        local cx,cy = chunk_key:match("(-?%d+)_(-?%d+)")
         chunk = Chunk:new(cx,cy)
         Chunk_data[chunk_key] = chunk
     end
     local is_change = false
-    local crr_block_id = nil 
-
 
     local comps = chunk:get_nodes()
     local edge_set = chunk:get_edge_nodes()
@@ -507,7 +503,7 @@ local function floor_fill(x,y)
 
     --创建新block: 未匹配到旧block的新连通分量; 匹配上的复用旧 id
     local new_block_ids = {}
-
+    local blocks_nodes = {}
 
     --刷新分量块，顺便匹配玩家坐标
     for i,v in ipairs(comps) do
@@ -523,7 +519,9 @@ local function floor_fill(x,y)
         end
         
         new_block_ids[i] = block_id
+        blocks_nodes[block_id] = v
     end
+
 
     --匹配玩家坐标
     local block_nodes = {}
@@ -544,7 +542,7 @@ local function floor_fill(x,y)
 
     chunk.blocks = new_block_ids
 
-    return crr_block_id,block_nodes,is_change,{x= nx, y = ny}
+    return  blocks_nodes, is_change
 
 end
 
@@ -552,9 +550,9 @@ end
 
 ---@class Manager
 ---@field node_size number 节点步长(8px)，对齐Chunk.node_size
----@field Floor_fill fun(x:number,y:number):number|nil, boolean, table 扫描并更新区块连通分量
+---@field Floor_fill fun(chunk_key:string):table,boolean 扫描并更新区块连通分量
 ---@field get_chunk_key fun(x:number,y:number):string 世界坐标转区块key
----@field get_block_chunk_key fun(block_id:number):string|nil block id → 所属区块key
+---@field get_block_chunk_key fun(block_id:number):string block id → 所属区块key
 ---@field get_block_distant fun(chunk_key1:string,chunk_key2:string):number 两区块间的曼哈顿距离(单位:chunk)
 ---@field get_block_neighbors fun(block_id:number):table<number, number|string> 返回邻居列表(number=block id, string=未知chunk)
 ---@field get_block_edge fun(from_node:string|number,to_node:string|number):table<string,boolean> 两block共享边上的节点交集
@@ -570,7 +568,7 @@ local M = {
     end,
     ---通过 block id 获取所属区块key
     ---@param block_id number 连通块id
-    ---@return string|nil chunk_key 格式 "cx_cy"，nil表示block不存在
+    ---@return string chunk_key 格式 "cx_cy"，
     get_block_chunk_key = function (block_id)
         if Block_data[block_id] then
             return Block_data[block_id].chunk_key

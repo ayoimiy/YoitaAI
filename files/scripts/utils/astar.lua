@@ -25,6 +25,18 @@ end
 ---@field is_goal fun(node): boolean  是否是目标节点
 ---@field logger  table?   日志，默认为print	
 ---@field max_count number? 最大迭代次数，默认5000
+AStarConfig = {}
+AStarConfig.__index = AStarConfig
+
+---@return AStarConfig
+function AStarConfig:new()
+	local obj = setmetatable({
+		max_count = 5000,
+	}, self)
+	return obj
+end
+
+
 
 ---@param config AStarConfig 配置
 ---@return table|nil,table|nil 为一个数组表，存放从起点到终点的所有离散点;为所有遍历的节点
@@ -105,5 +117,7 @@ function AStar(config)
 	logger:warn("[AStar] no path found, iters: " .. count)
 	return nil,nodes_set
 end
+
+
 
 

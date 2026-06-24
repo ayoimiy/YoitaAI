@@ -1,4 +1,4 @@
-
+--#region 全局变量
 local mod_name = "YoitaAI"
 local base_file = "mods/" .. mod_name .. "/"
 --Astar模块
@@ -7,12 +7,15 @@ dofile_once(base_file .. "files/scripts/utils/astar.lua")
 ---@type Manager
 local ME = dofile_once(base_file .. "files/scripts/memory/manager.lua")
 
+local node_size = 8
+local max_dist = 75
 
----当前所在的区块key缓存
-local FM = {
-    curr_chunk_key = nil ,
-}
+local curr_chunk_key = nil
+local blocks_nodes = {}
 
+--#endregion
+
+--#region 局部函数
 
 ---底层移动控制——向目标位置移动一步
 ---@param player Player 玩家实体
@@ -50,322 +53,286 @@ local Move_no_path = function (player)
     controls.mButtonDownRight = false
     controls.mButtonDownLeft  = false
 end
-
-
----@class BigFind
----@field path table<number, number|string>|nil 连通分量路径(block_id / chunk_key)
----@field path_index number 当前路径索引
----@field curr_block_id number|nil 玩家当前所在连通块id
----@field is_finding boolean 是否正在寻路中
----@field is_change boolean 地图是否发生变化(信号传递给Small_find)
----@field player_x number|nil 玩家位置x
----@field player_y number|nil 玩家位置y
-local Big_find = {
-    path  = {},
-    path_index = 0,
-    curr_block_id = nil ,
-    is_finding = false,
-    is_change = false,   --用于传递给小寻路模块
-    --传递给x轴小寻路模块的信息
-    player_x = nil,
-    player_y = nil,
-    block_nodes = nil,
-}
-
-
----@class SmallFind
----@field path table|nil 节点路径
----@field path_index number 当前路径索引
----@field max_dist number 到达目标点的判定距离阈值
----@field is_finding boolean 是否正在寻路中
-local Small_find = {
-    path = {},
-    path_index = 0 ,
-    max_dist = 75,
-    is_finding = false,
-}
-
-
-
----在连通分量图上寻路(Big_find = 粗粒度跨分量路径)
----基于 A* 算法，以 Block(id) 为节点、未知区块(string)为目标
----当玩家所在分量发生变化时调用，更新 self.path
----@return table|nil path 连通分量id数组; nil 表示无路径
-function Big_find:find()
-    local start = self.curr_block_id
-    print("[Big_find]find from "..start)
-    local curr_chunk_key = ME.get_block_chunk_key(start)
-    print("[Big_find]curr_chunk_key "..curr_chunk_key)
-    local scx,scy = curr_chunk_key:match("(-?%d+)_(-?%d+)")
-    print("[Big_find]scx "..scx .. " scy "..scy)
-    ---@type AStarConfig
-    local config = {
-        start = start,
-
-        get_node_key = function(id)
-            return tostring(id)
-        end,
-
-        get_h_func = function(node)
-            if type(node) == "number" then
-                --使其偏好下面的区块
-                local chunk_key = ME.get_block_chunk_key(node)
-                local cx,cy = chunk_key:match("(-?%d+)_(-?%d+)")
-                return math.max(0,cy-scy)
-            elseif type(node) == "string" then
-                --直接为区块
-                local cx,cy = node:match("(-?%d+)_(-?%d+)")
-                return math.max(0,cy-scy)
-            else
-                print("[BigFind]出现异常节点")
-                return -100000
-            end
-        end,
-
-        get_neighbors_func = function(id)
-            local neighbors = ME.get_block_neighbors(id)
-            return neighbors
-        end,
-
-        get_cost = function(from_node, to_node)
-            return 1
-        end,
-
-        is_goal = function(node)
-            if type(node) == "string" then
-                return true                
-            end
-            return false
-        end,
-
-        max_count = 1000,
-    }
-    local path = AStar(config)
-    print("[Big_find]find path "..#path)
-    local path_str = ""
-    for i,v in ipairs(path or {}) do
-        path_str = path_str..tostring(v).."-->"
+---@param x number
+---@param y number
+---@return number|nil block_id,number|nil nx,number|nil ny
+local function find_near_block(x,y)
+    --寻找坐标在哪个连通块
+    local nx = math.floor(x/node_size) * node_size
+    local ny = math.floor(y/node_size) * node_size
+    local key = nx .. "_" .. ny
+    for block_id,nodes in pairs(blocks_nodes) do
+        if nodes[key] ~= nil then
+            return block_id,nx,ny
+        end
     end
-    print("[Big_find]path "..path_str)
+end
 
 
+--#endregion
 
-    --更新路径
-    self.path = path
+--#region 类的定义
+
+---@class FindPath
+---@field find function 寻路函数
+---@field move function 对外APi
+---@field refresh function 刷新
+---@field path table 路径
+---@field path_index number 路径索引
+---@field is_finding boolean 是否正在寻路
+local FindPath = {}
+FindPath.__index = FindPath
+---@return FindPath
+function FindPath:new()
+    local obj = {}
+    setmetatable(obj, self)
+    obj.path = {}
+    obj.path_index = 1
+    obj.is_finding = false
+    return obj
+end
+function FindPath:refresh()
+    self.path = {}
     self.path_index = 1
-    self.is_finding = true
-    self.is_change = true
-
-    return path
+    self.is_finding = false
 end
----沿 Big_find 路径推进，驱动 Small_find 进行细粒度寻路
----取当前分量与下一分量，交给 Small_find:find() 做节点级路径规划
----@param player Player 玩家实体
-function Big_find:Move(player)
-    if self.path ~= nil and #self.path >= 2 then
 
-        if self.path_index >= #self.path then
-            --完美结束，即已经到达了目标点，可以进行再次寻路
-            self.is_finding = false
-            print("[Big_find]find complete")
-            return
+--#endregion
+
+--#region 大小寻路实现
+
+local BigFind = FindPath:new()
+local SmallFind = FindPath:new()
+
+--[[
+    实现大寻路
+]]
+function BigFind:find(sx,sy)
+    local config = AStarConfig:new()
+    config.start = find_near_block(sx,sy)
+    if config.start == nil then
+        print("[BigFind] start error")
+        return
+    end
+    local chunk = ME.get_block_chunk_key(config.start)
+    local _,scy = chunk:match("(-?%d+)_(-?%d+)")
+    config.max_count = 1000
+    config.get_node_key = function(node)
+        return tostring(node)
+    end
+    config.get_h_func = function(node)
+        local cy 
+        if type(node) == "number" then
+            local nchunk = ME.get_block_chunk_key(node)
+            _,cy = nchunk:match("(-?%d+)_(-?%d+)")
+        elseif type(node) == "string" then
+            _,cy = node:match("(-?%d+)_(-?%d+)")
         end
-      
-        --进行小寻路
-        if Small_find.is_finding == false or self.is_change == true  then
-            --提取节点        
-            local from_node = self.path[self.path_index]
-            local to_node   = self.path[self.path_index + 1]
-            --提供给小寻路信息
-            local target_nodes = ME.get_block_edge(from_node,to_node)
-
-            print("[Big_find]from_node "..from_node.." to_node "..to_node)
-            local target_str = ""
-            for i,v in ipairs(target_nodes or {}) do
-                target_str = target_str..tostring(v).."-->"
-            end
-            print("[Big_find]target_nodes "..target_str)
-
-
-            self.block_nodes = self.block_nodes or {}
-            Small_find:find(self.player_x,self.player_y,self.block_nodes,target_nodes)
-            Small_find.is_finding = true
-            self.is_change = false
-        elseif Small_find.path == nil or #Small_find.path < 2 then
-            print("[Big_find]error,no path")
+        --惩罚比起点小的区块
+        return math.max(0, scy - cy)
+    end
+    config.get_neighbors_func = function(node)
+        return ME.get_block_neighbors(node)
+    end
+    config.get_cost = function(from_node, to_node)
+        return 1
+    end
+    config.is_goal = function(node)
+        if type(node) == "string" then
+            return true
         end
-    
+        return false
     end
 
+    self.path = AStar(config) or {}
+    self.is_finding = true
+    self.path_index = 1
 end
----在单个连通分量内做细粒度A*寻路(Small_find = 节点级路径)
----以 8px 步长网格为基础，用 5 射线检测评估可通行性
----@param sx number 起点x(网格对齐)
----@param sy number 起点y(网格对齐)
----@param nodes table<string,boolean> 当前分量内所有可通行节点表，key="x_y"
----@param target_nodes table<string,boolean> 目标节点集合，key="x_y"，到达任一即达目标
----@return table|nil path {x:number,y:number}[] 节点路径数组; nil 表示无路径
-function Small_find:find(sx,sy,nodes,target_nodes)
-    
-    local node_size = ME.node_size
-    ---@type AStarConfig
-    local config = {
-        start = {x = sx ,y = sy},
-
-        get_node_key = function(node)
-            return  node.x .. "_" .. node.y 
-        end,
-
-        get_h_func = function(node)
+function BigFind:move(player,find)
+    local x,y = player:get_pos()
+    local is_change = false
+    if find or self.is_finding == false then
+        self:find(x,y)
+        is_change = true
+    end
+    if #self.path > 1 then
+        --检查是否寻路成功
+        if self.path_index > #self.path then
+            self:refresh()
+            return true
+        end
+        local curr_node = self.path[self.path_index]
+        local next_node = self.path[self.path_index+1]
+        --委托给小Find
+        if SmallFind:move(player,curr_node,next_node,is_change) then
+            self.path_index = self.path_index + 1
+            return false
+        end
+    end
+    return false
+end
+---@param nodes table<string,boolean>
+---@param target_nodes table<string,boolean>
+---@param sx number
+---@param sy number
+function SmallFind:find(nodes,target_nodes,sx,sy)
+    local config = AStarConfig:new()
+    local tx,ty
+    local count = 0
+    for k,v in pairs(target_nodes) do
+        local x,y = k:match("(-?%d+)_(-?%d+)")
+        x,y = tonumber(x),tonumber(y)
+        tx = (tx or 0) + x
+        ty = (ty or 0) + y
+        count = count + 1
+    end
+    tx,ty = tx/count,ty/count
+    config.start = {x=sx,y=sy}
+    config.max_count = 1000
+    config.get_node_key = function(node)
+        return node.x.."_"..node.y
+    end
+    config.get_h_func = function(node)
+        if not (tx and ty) then
             return 0
-        end,
-
-        get_neighbors_func = function(node)
-            local neighbors = {}
-            local t = {-1,0,1}
-            for _,dx in ipairs(t) do
-                for _,dy in ipairs(t) do
-                    if dx ~= 0 or dy ~= 0 then
-                        local x = node.x + dx * node_size
-                        local y = node.y + dy * node_size
-                        local key = x .. "_" .. y
-                        if nodes[key] ~= nil then
-                            table.insert(neighbors,{x = x, y = y })
-                        end
+        end
+        -- 曼哈顿距离
+        return math.abs(node.x - tx) + math.abs(node.y - ty)
+    end
+    config.get_neighbors_func = function(node)
+        local neighbors = {}
+        local t = {-1,0,1}
+        for _,dx in ipairs(t) do
+            for _,dy in ipairs(t) do
+                if dx ~= 0 or dy ~= 0 then
+                    local x = node.x + dx * node_size
+                    local y = node.y + dy * node_size
+                    local key = x .. "_" .. y
+                    if nodes[key] ~= nil then
+                        table.insert(neighbors,{x = x, y = y })
                     end
                 end
             end
-            return neighbors
-        end,
-
-        get_cost = function(from_node, to_node)
-            local loss = 0
-            if (RaytracePlatforms(from_node.x,from_node.y,to_node.x,to_node.y)) then
-                return node_size/0.00001
-            end
-            --5射线检查
-            local point= {
-                {-3, -8}, {3, -8}, {-3, 8}, {3, 8}
-            }
-            local count = 0 
-            for _,v in ipairs(point) do
-                local bx = RaytracePlatforms(from_node.x + v[1], from_node.y + v[2], to_node.x + v[1], to_node.y + v[2])
-                if bx then
-                    count = count + 1
-                end
-            end
-            --0条射线完美，1条命中可接受，2条命中难以接受，3以上无法接受
-            if count == 0 then
-                loss = 0 
-            elseif count == 1 then
-                loss = node_size / 0.5
-            elseif count == 2 then
-                loss =  node_size /0.1 
-            else
-                return node_size/0.00001
-            end 
-            --计算两个节点
-            local dx =  to_node.x - from_node.x 
-            local dy  = to_node.y -from_node.y
-            if dx == 0 or dy ==0 then 
-                return node_size + loss
-            else
-                return math.sqrt(2) * node_size + loss
-            end
-        end,
-
-        is_goal = function(node)
-            local key  = node.x .. "_" .. node.y 
-            if target_nodes[key] ~= nil then
-                return true
-            end
-            return false
-        end,
-
-        max_count = 1000,
-    }
-    
-    local path = AStar(config)
-    --更新路径
-    self.path = path
-    self.path_index = 1
-    self.is_finding = true
-
-    return path
-end
-
----沿 Small_find 节点路径移动玩家
----逐节点推进，到达当前目标节点阈值后切换到路径下一个节点
----@param player Player 玩家实体
-function Small_find:Move(player)
-    local x,y = player:get_pos()
-    if not (x and y) then
-        error("entity has no pos")
+        end
+        return neighbors
     end
-    --节点移动
-    
-    if self.path ~= nil and #self.path > 2 then 
-        if self.path_index >= #self.path then
-            --完成
-            self.is_finding = false
+    config.get_cost = function(from_node, to_node)
+        local loss = 0 
+        --计算两个节点
+        local dx =  to_node.x - from_node.x 
+        local dy  = to_node.y -from_node.y
+        if dx == 0 or dy ==0 then 
+            return node_size + loss
+        else
+            return math.sqrt(2) * node_size + loss
+        end
+    end
+    config.is_goal = function(node)
+        local key  = node.x .. "_" .. node.y
+        if target_nodes[key] then
+            return true
+        end
+        return false
+    end
+
+    self.path = AStar(config) or {}
+    self.is_finding = true
+    self.path_index = 1
+end
+---@param from_node string|number
+---@param to_node string|number
+---@param is_change boolean
+function SmallFind:move(player,from_node, to_node,is_change)
+    local x,y = player:get_pos()
+    if self.is_finding == false or is_change == true then
+        local target_nodes =  ME.get_block_edge(from_node, to_node)
+        local block_id,sx,sy = find_near_block(x,y)
+        if not (block_id and sx and sy) then
+            error("[SmallFind]block_id error")
             return
         end
 
-        local target = self.path[self.path_index + 1]
-    
+        local nodes = blocks_nodes[block_id]
+        self:find(nodes,target_nodes,sx,sy)
+    end
+    --移动
+    if #self.path > 0 then
+        --检查是否寻路成功
+        if self.path_index > #self.path then
+            self:refresh()
+            return true
+        end
+        --委托给底层移动
+        local target = self.path[self.path_index]
         move(player,target)
-
+        
         local dist =   (x-target.x)^2 + (y-4-target.y)^2
-        if dist < self.max_dist then
+        if dist < max_dist then
             self.path_index = self.path_index + 1
         end
     end
+    return false
 end
 
+
+--#endregion
+
+--#region 对外接口
 
 ---主控制状态的接口表
 ---@class FindPathMain
 ---@field is_finding boolean 是否正在执行寻路
+---@field debug table 调试信息
 local M = {
-    is_finding = false
+    is_finding = false,
+    
 }
----每帧更新——负责区块扫描、路径规划和移动控制
----在玩家进入新chunk时触发 Floor_fill 扫描，然后依次执行 Big_find:find() → Big_find:Move() → Small_find:Move()
----@param player Player 玩家实体
 function M.update(player)
     local x,y = player:get_pos()
-    local chunk_key = ME.get_chunk_key(x,y)
+    --计算当前区间
+    local cc_key = ME.get_chunk_key(x,y)
+    local set = {}
     local is_change = false
-    local curr_block_id = nil
-    local block_nodes = {}
-    local pos = nil
-    if chunk_key ~= FM.curr_chunk_key then
-        print("[FindPath]chunk change")
-        curr_block_id,block_nodes,is_change,pos = ME.Floor_fill(x,y)
-        FM.curr_chunk_key = chunk_key
-        print("[FindPath]chunk change to "..chunk_key)
-        Big_find.curr_block_id = curr_block_id
-        print("[FindPath]block change to "..curr_block_id)
-        Big_find.player_x = pos.x
-        Big_find.player_y = pos.y
-        print("[FindPath]player pos change to "..pos.x..","..pos.y)
-        Big_find.block_nodes = block_nodes
-        local count = 0 
-        for k,v in pairs(block_nodes) do
-            count = count + 1
-        end
-        print("[FindPath]block nodes change to ".. count)
+    if cc_key ~= curr_chunk_key then 
+        set,is_change = ME.Floor_fill(cc_key)
+        curr_chunk_key = cc_key
+        blocks_nodes = set
     end
-    if is_change then
-        --触发区块改变，则进行寻路
-        Big_find:find()
+    if M.is_finding then
+        BigFind:move(player,is_change)
         is_change = false
     end
-    if M.is_finding == true then
-        --如果已经寻了一次路，则进行移动
-
-        Big_find:Move(player)
-    end
 end
+
+--#endregion
+
+--#region debug
+
+---@param nodes table<string,boolean>
+local function nodes_to_nodes(nodes)
+    local ret = {}
+    for k,v in pairs(nodes or {}) do
+        local x,y = k:match("(-?%d+)_(-?%d+)")
+        x,y = tonumber(x),tonumber(y)
+        table.insert(ret,{x=x,y=y})
+    end
+    return ret
+end
+M.debug = {
+    path_nodes = function ()
+        return SmallFind.path
+    end,
+    -- get_target_nodes = function ()
+    --     return nodes_to_nodes(Big_find.blocks_nodes)
+    -- end,
+    index = function ()
+        return SmallFind.path_index
+    end,
+    curr_chunk_key = function ()
+        return curr_chunk_key
+    end
+}
+
+--#endregion
 
 return M
