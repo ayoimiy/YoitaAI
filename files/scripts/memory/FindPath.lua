@@ -177,27 +177,14 @@ end
 ---@param sy number
 function SmallFind:find(nodes,target_nodes,sx,sy)
     local config = AStarConfig:new()
-    local tx,ty
-    local count = 0
-    for k,v in pairs(target_nodes) do
-        local x,y = k:match("(-?%d+)_(-?%d+)")
-        x,y = tonumber(x),tonumber(y)
-        tx = (tx or 0) + x
-        ty = (ty or 0) + y
-        count = count + 1
-    end
-    tx,ty = tx/count,ty/count
+
     config.start = {x=sx,y=sy}
     config.max_count = 1000
     config.get_node_key = function(node)
         return node.x.."_"..node.y
     end
     config.get_h_func = function(node)
-        if not (tx and ty) then
-            return 0
-        end
-        -- 曼哈顿距离
-        return math.abs(node.x - tx) + math.abs(node.y - ty)
+        return 0 
     end
     config.get_neighbors_func = function(node)
         local neighbors = {}

@@ -523,23 +523,6 @@ local function floor_fill(chunk_key)
     end
 
 
-    --匹配玩家坐标
-    local block_nodes = {}
-    local nx,ny = math.floor(x / Chunk.node_size) * Chunk.node_size  ,math.floor(y / Chunk.node_size) * Chunk.node_size
-    local key = nx .. "_" .. ny
-    print("[floor_fill] player pos:" .. key)
-    for i,v in ipairs(comps) do
-        if v[key] ~= nil then
-            --匹配成功
-            crr_block_id = new_block_ids[i]
-            block_nodes = v
-            break
-        end
-    end
-    --如果这几个都不是？
-    
-
-
     chunk.blocks = new_block_ids
 
     return  blocks_nodes, is_change
