@@ -7,15 +7,15 @@ dofile_once(base_file .. "files/scripts/utils/astar.lua")
 local ME = dofile_once(base_file .. "files/scripts/memory/manager.lua")
 
 
+---当前所在的区块key缓存
 local FM = {
-    curr_chunk_key = nil , 
-
+    curr_chunk_key = nil ,
 }
 
 
----底层移动
----@param player Player
----@param target table 目标id
+---底层移动控制——向目标位置移动一步
+---@param player Player 玩家实体
+---@param target {x:number, y:number} 目标坐标
 local move = function (player,target)
     local controls = player:controls_comp()
     local x,y = player:get_pos()
@@ -40,7 +40,8 @@ local move = function (player,target)
         controls.mButtonDownDown = in_water and not RaytraceSurfaces(x, y, x, y)
     end
 end
----@param player Player
+---停止所有移动按键——无路径时原地待命
+---@param player Player 玩家实体
 local Move_no_path = function (player)
     local controls = player:controls_comp()
     controls.mButtonDownDown = false
@@ -50,25 +51,42 @@ local Move_no_path = function (player)
 end
 
 
+---@class BigFind
+---@field path table<number, number|string> 连通分量路径(block_id / chunk_key)
+---@field path_index number 当前路径索引
+---@field curr_block_id number|nil 玩家当前所在连通块id
+---@field is_finding boolean 是否正在寻路中
+---@field is_change boolean 地图是否发生变化(信号传递给Small_find)
+---@field player_x number|nil 玩家位置x
+---@field player_y number|nil 玩家位置y
 local Big_find = {
     path  = {},
     path_index = 0,
     curr_block_id = nil ,
     is_finding = false,
+    is_change = false,   --用于传递给小寻路模块
+    player_x = nil,
+    player_y = nil,
 }
 
 
+---@class SmallFind
+---@field path table<number, {x:number, y:number}>|nil 节点路径
+---@field path_index number 当前路径索引
+---@field max_dist number 到达目标点的判定距离阈值
+---@field is_finding boolean 是否正在寻路中
 local Small_find = {
     path = {},
     path_index = 0 ,
     max_dist = 75,
     is_finding = false,
-
 }
 
 
 
 ---在连通分量图上寻路(Big_find = 粗粒度跨分量路径)
+---基于 A* 算法，以 Block(id) 为节点、未知区块(string)为目标
+---当玩家所在分量发生变化时调用，更新 self.path
 ---@return table|nil path 连通分量id数组; nil 表示无路径
 function Big_find:find()
     local start = self.curr_block_id
@@ -121,33 +139,50 @@ function Big_find:find()
     --更新路径
     self.path = path
     self.path_index = 1
+    self.is_finding = true
+    self.is_change = true
 
     return path
 end
+---沿 Big_find 路径推进，驱动 Small_find 进行细粒度寻路
+---取当前分量与下一分量，交给 Small_find:find() 做节点级路径规划
+---@param player Player 玩家实体
 function Big_find:Move(player)
-    --移动节点
-    
     if self.path ~= nil and #self.path > 2 then
 
         if self.path_index >= #self.path then
+            --完美结束，即已经到达了目标点，可以进行再次寻路
+            self.is_finding = false
             return
         end
       
         --进行小寻路
-        if Small_find.is_finding == false then
+        if Small_find.is_finding == false or self.is_change == true  then
             --提取节点        
             local from_node = self.path[self.path_index]
             local to_node   = self.path[self.path_index + 1]
+            --提供给小寻路信息
+
+            
+
+
             Small_find:find()
             Small_find.is_finding = true
+            self.is_change = false
         elseif Small_find.path == nil or #Small_find.path < 2 then
-            print("[Big_find]异常，小寻路失败")
+            print("[Big_find]error,no path")
         end
-        
+    
     end
 
 end
-
+---在单个连通分量内做细粒度A*寻路(Small_find = 节点级路径)
+---以 8px 步长网格为基础，用 5 射线检测评估可通行性
+---@param sx number 起点x(网格对齐)
+---@param sy number 起点y(网格对齐)
+---@param nodes table<string,boolean> 当前分量内所有可通行节点表，key="x_y"
+---@param target_nodes table<string,boolean> 目标节点集合，key="x_y"，到达任一即达目标
+---@return table|nil path {x:number,y:number}[] 节点路径数组; nil 表示无路径
 function Small_find:find(sx,sy,nodes,target_nodes)
     
     local node_size = ME.node_size
@@ -232,10 +267,14 @@ function Small_find:find(sx,sy,nodes,target_nodes)
     --更新路径
     self.path = path
     self.path_index = 1
+    self.is_finding = true
 
     return path
 end
 
+---沿 Small_find 节点路径移动玩家
+---逐节点推进，到达当前目标节点阈值后切换到路径下一个节点
+---@param player Player 玩家实体
 function Small_find:Move(player)
     local x,y = player:get_pos()
     if not (x and y) then
@@ -243,39 +282,54 @@ function Small_find:Move(player)
     end
     --节点移动
     
-    if self.path == nil or #self.path < 2 or self.path_index >= #self.path  then
-        return true
-    end
-    local target = self.path[self.path_index + 1]
-    
-    move(player,target)
+    if self.path ~= nil and #self.path > 2 then 
+        if self.path_index >= #self.path then
+            --完成
+            self.is_finding = false
+            return
+        end
 
-    local dist =   (x-target.x)^2 + (y-4-target.y)^2
-    if dist < self.max_dist then
-        self.path_index = self.path_index + 1
+        local target = self.path[self.path_index + 1]
+    
+        move(player,target)
+
+        local dist =   (x-target.x)^2 + (y-4-target.y)^2
+        if dist < self.max_dist then
+            self.path_index = self.path_index + 1
+        end
     end
 end
 
 
+---主控制状态的接口表
+---@class FindPathMain
+---@field is_finding boolean 是否正在执行寻路
 local M = {
     is_finding = false
 }
---刷新区块
+---每帧更新——负责区块扫描、路径规划和移动控制
+---在玩家进入新chunk时触发 Floor_fill 扫描，然后依次执行 Big_find:find() → Big_find:Move() → Small_find:Move()
+---@param player Player 玩家实体
 function M.update(player)
     local x,y = player:get_pos()
     local chunk_key = ME.get_chunk_key(x,y)
     local is_change = false
-    local components = nil
+    local curr_block_id = nil
+    local pos = nil
     if chunk_key ~= FM.curr_chunk_key then
-        components,is_change = ME.Floor_fill(x,y)
+        curr_block_id,is_change,pos = ME.Floor_fill(x,y)
         FM.curr_chunk_key = chunk_key
+        Big_find.curr_block_id = curr_block_id
+        Big_find.player_x = pos.x
+        Big_find.player_y = pos.y
     end
     --寻路部分
-    if M.is_finding then
+    if M.is_finding == false or is_change == true then
         if is_change then
             Big_find:find()
         end
         Big_find:Move(player)
+        is_change = false
     end
 end
 

@@ -463,7 +463,7 @@ end
 
 ---@param x number
 ---@param y number
----@return  number|nil block_id, boolean is_change
+---@return  number|nil block_id, boolean is_change, table player_pos
 local function floor_fill(x,y)
     --获取区块
     local chunk_key = Chunk.get_key(x,y)
@@ -539,11 +539,17 @@ local function floor_fill(x,y)
             break
         end
     end
+    --如果这几个都不是？
+    
+
+
+
+
 
 
     chunk.blocks = new_block_ids
 
-    return crr_block_id,is_change
+    return crr_block_id,is_change,{x= nx, y = ny}
 
 end
 
