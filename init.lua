@@ -52,7 +52,6 @@ local FindPath = dofile_once(base_file .. "files/scripts/memory/FindPath.lua")
 
 local display_mode = 0
 function OnWorldPreUpdate() 
-    
     sTout:Loop()
 
     -- frame_counter = frame_counter + 1

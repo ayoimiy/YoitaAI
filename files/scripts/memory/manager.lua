@@ -16,12 +16,24 @@ end
 local width = 256
 local height = 256
 local node_size = 8
+local width_num = math.floor(width / node_size) + 1
+local height_num = math.floor(height / node_size) + 1
+local chunk_w_num = 100000
+
+
 ---记录区块数据
 ---@type table<string,Chunk>
 local Chunk_data = {}
 --记录所有连通分量
 ---@type table<number,Block>
 local Block_data = {}
+
+
+local function data_class()
+    local _data = {}
+    _data.__index = _data
+    return _data
+end
 
 ---@class Direction 
 ---@field dx number
@@ -57,8 +69,99 @@ local Directions = {
     BOTTOM = Direction:new(0,1)
 }
 
+---@class NodeSet
+---@field count number
+---@field nodes table<number,boolean>
+local NodeSet = data_class()
+---@return NodeSet
+function NodeSet:new()
+    local obj = setmetatable({
+        nodes = {},
+        count = 0,
+    },NodeSet)
+    return obj
+end
+---注意节点必须大于初始坐标
+---@param x number  节点x
+---@param y number  节点y
+---@param sx number     区块起始x
+---@param sy number     区块起始y
+---@return number
+function NodeSet:add(x,y,sx,sy)
+    local dx = x - sx 
+    local dy = y - sy
+    dx = math.floor(dx / node_size) * node_size
+    dy = math.floor(dy / node_size) * node_size
+    local id = dx + dy * width_num
+    self.nodes[id] = true
+    self.count = self.count + 1
+    return id
+end
+---获取实际坐标
+---@param id number
+---@return number,number
+function NodeSet:get_pos(id,sx,sy)
+    local dx = id % width_num
+    local dy = math.floor(id / node_size)
+    return dx + sx, dy + sy
+end
+---获取节点状态
+---@param id number
+---@return boolean state
+function NodeSet:get_state(id)
+    return self.nodes[id]
+end
+---修改节点状态
+---@param id number
+---@return boolean ok
+function NodeSet:set_state(id)
+    if self.nodes[id] then
+        self.nodes[id] = false
+        return true
+    else
+        return false
+    end
+end
+---获取邻居
+---@param id number
+---@return number[] neighbors
+function NodeSet:get_neighbors(id)
+    local dx = id % width_num
+    local dy = math.floor(id / node_size)
+    local neighbors = {}
+    for _,v in pairs(Directions) do
+        local nx = dx + v.dx * node_size
+        local ny = dy + v.dy * node_size
+        local key = nx + ny * width_num
+        if self.nodes[key] ~= nil then
+            table.insert(neighbors,key)
+        end
+    end
+    return neighbors
+end
+local edge = {
+    {1,0,width_num-2,0}, --上边
+    {0,1,0,height_num-2}, --左边
+    {width_num -1,1,width_num-1,height_num-2}, --下边
+    {1,height_num -1 ,width_num-2,height_num -1} --右边
+}
+---获取边集
+---@return number[]
+function NodeSet:get_edges()
+    local edge_set = {}
+    for _,v in ipairs(edge) do
+        for x = v[1],v[3],1 do
+            for y = v[2],v[4],1 do
+                local key = x  + y * width_num
+                if self.nodes[key] ~= nil then
+                    table.insert(edge_set,key)
+                end
+            end            
+        end
+    end
+    return edge_set
+end
 --#endregion
-
 
 --#region local函数(不依赖类)
 
@@ -132,8 +235,6 @@ local function check_node(node_key)
     end
     return true
 end
-
-
 
 --#endregion
 
@@ -376,6 +477,9 @@ function Chunk:nodes_get_edge_key(edge_set,nodes)
     local key = edge_set_to_mask(edge_nodes,sx,sy)
     return key
 end
+
+
+
 
 
 ---@class Block 连通块
