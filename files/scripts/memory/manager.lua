@@ -12,6 +12,10 @@ function Get_Component_edge_id()
     return Component_edge_id
 end
 
+--全局数据
+local width = 256
+local height = 256
+local node_size = 8
 ---记录区块数据
 ---@type table<string,Chunk>
 local Chunk_data = {}
@@ -76,7 +80,11 @@ local function raytrace5(nodeA,nodeB)
     return true
 end
 --寻找相连通的点集
-local function bfs(nodes,start_node,node_size)
+---@param nodes table<string,boolean> 所有符合条件的节点集合
+---@param edge_set table<string,boolean> 边节点集合
+---@param start_node table 开始点
+---@param node_size number 节点大小
+local function bfs(nodes,edge_set,start_node,node_size)
     local Component = {}
     -- 创建队列
     local queue = {}
@@ -91,27 +99,41 @@ local function bfs(nodes,start_node,node_size)
     while #queue > 0 do
         --取出一个节点
         local node = table.remove(queue,1)
-        local directions = {{0,node_size},{0,-node_size},{node_size,0},{-node_size,0}}
+        local dirs =  Directions
         --寻找邻居节点
-        for _,dir in ipairs(directions) do
-            local nx = node.x + dir[1]
-            local ny = node.y + dir[2]
+        for k,dir in pairs(dirs) do
+            local nx = node.x + dir.dx * node_size
+            local ny = node.y + dir.dy * node_size
             local key = nx.."_"..ny
             local n_node = {x = nx,y = ny}
             if nodes[key] == false and raytrace5(node,n_node) then
-                table.insert(queue,n_node)
-                nodes[key] = true
-                Component[key] = true
-                count = count + 1
-            end           
-        end    
-    end 
-
+                --检查是不是两个都是边界点
+                if not (edge_set[key] and edge_set[node.x .. "_" .. node.y]) then
+                    table.insert(queue,n_node)
+                    nodes[key] = true
+                    Component[key] = true
+                    count = count + 1
+                end 
+            end
+        end
+    end
     if count < 2 then
         return nil
     end
     return Component
 end
+
+--检查某个点是否可用
+---@param node_key string
+local function check_node(node_key)
+    local x,y = node_key:match("(-?%d+)_(-?%d+)")
+    if RaytracePlatforms(x,y,x+1,y) then
+       return false 
+    end
+    return true
+end
+
+
 
 --#endregion
 
@@ -141,10 +163,6 @@ end
 ---@field cy number 区块y
 ---@field blocks number[] 连通块id列表(实际 Block 对象存于 Block_data)
 local Chunk = class()
---Chunk的静态变量定义
-Chunk.width = 256
-Chunk.height = 256
-Chunk.node_size = 8
 function Chunk:init(cx,cy)
     self.cx = cx
     self.cy = cy
@@ -160,16 +178,16 @@ end
 local function node_to_bit(key, start_x, start_y)
     local nx, ny = key:match("(-?%d+)_(-?%d+)")
     nx, ny = tonumber(nx), tonumber(ny)
-    local end_x = start_x + Chunk.width
-    local end_y = start_y + Chunk.height
+    local end_x = start_x + width
+    local end_y = start_y + height
     if ny == start_y and nx >= start_x and nx <= end_x then
-        return (nx - start_x) / Chunk.node_size               --顶边 0..32
+        return (nx - start_x) / node_size              --顶边 0..32
     elseif nx == end_x and ny >= start_y and ny <= end_y then
-        return 32 + (ny - start_y) / Chunk.node_size           --右边 33..64
+        return 32 + (ny - start_y) / node_size          --右边 33..64
     elseif ny == end_y and nx >= start_x and nx <= end_x then
-        return 64 + (end_x - nx) / Chunk.node_size             --底边 65..96
+        return 64 + (end_x - nx) / node_size            --底边 65..96
     elseif nx == start_x and ny >= start_y and ny <= end_y then
-        return 96 + (end_y - ny) / Chunk.node_size             --左边 97..127
+        return 96 + (end_y - ny) / node_size            --左边 97..127
     end
     return -1   --非周长节点
 end
@@ -204,9 +222,9 @@ end
 ---@param dir Direction
 ---@return table<string,boolean>
 local function mask_to_edge_set(mask, start_x, start_y, dir)
-    local end_x = start_x + Chunk.width
-    local end_y = start_y + Chunk.height
-    local ns = Chunk.node_size
+    local end_x = start_x + width
+    local end_y = start_y + height
+    local ns = node_size
 
     local single = dir ~= nil
     local result = {}
@@ -268,8 +286,8 @@ end
 ---@param y number
 ---@return number cx, number cy
 function Chunk.get_pos(x,y)
-    local cx = math.floor(x/Chunk.width)
-    local cy = math.floor(y/Chunk.height)
+    local cx = math.floor(x/width)
+    local cy = math.floor(y/height)
     return cx,cy
 end
 --获取区块key   
@@ -285,19 +303,19 @@ end
 --获取边节点
 ---@return table<string,table<string,boolean>>
 function Chunk:get_edge_nodes()
-    local sx,sy = self.cx * self.width,self.cy * self.height
+    local sx,sy = self.cx * width,self.cy * height
     local Edge = {
-        LEFT = {sx,sy,sx,sy+self.height},
-        RIGHT = {sx+self.width,sy,sx+self.width,sy+self.height},
-        TOP = {sx,sy,sx+self.width,sy},
-        BOTTOM = {sx,sy+self.height,sx+self.width,sy+self.height}
+        LEFT = {sx,sy,sx,sy+height},
+        RIGHT = {sx+width,sy,sx+width,sy+height},
+        TOP = {sx,sy,sx+width,sy},
+        BOTTOM = {sx,sy+height,sx+width,sy+height}
     }
     local nodes = {}
     for k,v in pairs(Edge) do
         local dir = Directions[k]:tostring()
         nodes[dir] = {}
-        for x = v[1],v[3],self.node_size do
-            for y = v[2],v[4],self.node_size do
+        for x = v[1],v[3],node_size do
+            for y = v[2],v[4],node_size do
                 nodes[dir][tostring(x).."_"..tostring(y)] = true
             end
         end
@@ -306,31 +324,34 @@ function Chunk:get_edge_nodes()
 end
 ---将区块内的点转化为节点集
 function Chunk:to_nodes()
-    local sx = self.cx * self.width
-    local sy = self.cy * self.height
+    local sx = self.cx * width
+    local sy = self.cy * height
     local nodes = {}
-    for y = sy,sy + self.height,self.node_size do 
-        for x = sx,sx + self.width,self.node_size do
-            if not RaytracePlatforms(x,y,x+1,y) then
-                nodes[tostring(x).."_"..tostring(y)] = false
+    for y = sy,sy + height,node_size do 
+        for x = sx,sx + width,node_size do
+            local node_key = x .. "_" .. y
+            if check_node(node_key) then
+                nodes[node_key] = false
             end
         end
     end
     return nodes
 end
 ---将区块切分成内部连通的点集
-function Chunk:get_nodes()
+---@param edge_set table 边节点集
+function Chunk:get_nodes(edge_set)
     local comps = {}
     local nodes = self:to_nodes()
-    local sx,sy = self.cx * self.width,self.cy * self.height
-    for y = sy,sy + self.height,self.node_size do 
-        for x = sx,sx + self.width,self.node_size do
+    local sx,sy = self.cx * width,self.cy * height
+    --只遍历内部点，边界点由内部点bfs获取
+    for y = sy + node_size,sy + height - node_size,node_size do 
+        for x = sx + node_size,sx + width - node_size,node_size do
             if nodes[ tostring(x).."_"..tostring(y)] == false then
-               local comp = bfs(nodes,{x = x,y = y},self.node_size)
+               local comp = bfs(nodes,edge_set,{x = x,y = y},node_size)
                if comp ~= nil then
                     table.insert(comps,comp)
                end
-            end            
+            end  
         end
     end
     return comps
@@ -340,8 +361,8 @@ end
 ---@param nodes table 尚未分配的节点集
 ---@return string key 边节点mask
 function Chunk:nodes_get_edge_key(edge_set,nodes)
-    local sx = self.cx * Chunk.width
-    local sy = self.cy * Chunk.height
+    local sx = self.cx * width
+    local sy = self.cy * height
     local edge_nodes = {}
     for node,_ in pairs(nodes) do 
         for _,dir in pairs(Directions) do 
@@ -377,7 +398,7 @@ end
 function Block:get_edge(dir)
     local chunk_key = self.chunk_key
     local chunk = Chunk_data[chunk_key]
-    return mask_to_edge_set(self.hash_key,chunk.cx * Chunk.width,chunk.cy * Chunk.height,dir)
+    return mask_to_edge_set(self.hash_key,chunk.cx * width,chunk.cy * height,dir)
 end
 
 
@@ -449,8 +470,19 @@ local function Create_new_blocks(block_fps,chunk_key)
             --当区块已存在时，不应该还残存旧块的占位
             block.neighbors[key] = nil
         elseif next(block:get_edge(dir)) ~= nil then
-            --连接未知区间
-            block.neighbors[key] = true
+            --检查边界点是否可以进入该区块
+            local edge_set = block:get_edge(dir)
+            local count = 0
+            for node_key in pairs(edge_set) do 
+                if check_node(node_key) then
+                    count = count + 1
+                end
+            end
+            if count > 0 then
+                --建立连接关系
+                block.neighbors[key] = true
+            end
+
         end
     end
     return block
@@ -468,9 +500,8 @@ local function floor_fill(chunk_key)
         Chunk_data[chunk_key] = chunk
     end
     local is_change = false
-
-    local comps = chunk:get_nodes()
     local edge_set = chunk:get_edge_nodes()
+    local comps = chunk:get_nodes(edge_set)
     --记录新连通点集的边指纹
     local comps_fps = {}
     for i, comp in ipairs(comps) do 
@@ -521,8 +552,6 @@ local function floor_fill(chunk_key)
         new_block_ids[i] = block_id
         blocks_nodes[block_id] = v
     end
-
-
     chunk.blocks = new_block_ids
 
     return  blocks_nodes, is_change
@@ -540,7 +569,7 @@ end
 ---@field get_block_neighbors fun(block_id:number):table<number, number|string> 返回邻居列表(number=block id, string=未知chunk)
 ---@field get_block_edge fun(from_node:string|number,to_node:string|number):table<string,boolean> 两block共享边上的节点交集
 local M = {
-    node_size = Chunk.node_size,
+    node_size = node_size,
     Floor_fill = floor_fill,
     ---世界坐标转区块key
     ---@param x number 世界坐标x
@@ -556,6 +585,8 @@ local M = {
         if Block_data[block_id] then
             return Block_data[block_id].chunk_key
         end
+        print("block_id not found")
+        return "0_0"
     end,
     ---计算两个区块间的曼哈顿距离(单位:chunk)
     ---@param chunk_key1 string 区块key "cx_cy"
@@ -587,7 +618,7 @@ local M = {
     ---@return table<string, boolean> edge_set 共享边节点集，key="x_y"
     get_block_edge = function (from_node,to_node)
         if type(from_node) ~= "number" then
-            print("[get_block_edge] from_node type error")
+            print("[get_block_edge] from_node type error:" .. tostring(from_node))
             return {}
         end
         local block1 = Block_data[from_node]
@@ -606,15 +637,22 @@ local M = {
             local chunk2 = Chunk_data[block2.chunk_key]
             local dir = Direction:new(chunk2.cx - chunk1.cx, chunk2.cy - chunk1.cy)
             local edge_set1 = block1:get_edge(dir)
-            local edge_set2 = block2:get_edge(-dir)        
+            local edge_set2 = block2:get_edge(-dir)   
             for k,_ in pairs(edge_set1) do
-                if edge_set2[k] then
-                    edge_set[k] = true
+                --检查区块上存在，并且临近点存在
+                if edge_set2[k] and check_node then
+                    local x,y = k:match("(-?%d+)_(-?%d+)")
+                    x,y = tonumber(x),tonumber(y)
+                    x,y = x + dir.dx,y + dir.dy
+                    local key = x .. "_" .. y
+                    if check_node(key) then
+                        edge_set[k] = true
+                    end
                 end
             end
         else
             print("[get_block_edge] to_node type error")
-        end        
+        end
         return edge_set
     end
 }

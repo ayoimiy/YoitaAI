@@ -99,6 +99,11 @@ end
 
 --#endregion
 
+--debug变量，之后删
+local debug_target_nodes = {}
+local debug_all_nodes = {}
+
+
 --#region 大小寻路实现
 
 local BigFind = FindPath:new()
@@ -108,6 +113,9 @@ local SmallFind = FindPath:new()
     实现大寻路
 ]]
 function BigFind:find(sx,sy)
+
+    print("[BigFind]Start finding path... " .. string.format("Player matched coordinates: %.0f,%.0f",sx,sy))
+
     local config = AStarConfig:new()
     config.start = find_near_block(sx,sy)
     if config.start == nil then
@@ -121,15 +129,15 @@ function BigFind:find(sx,sy)
         return tostring(node)
     end
     config.get_h_func = function(node)
-        local cy 
+        local cx,cy 
         if type(node) == "number" then
             local nchunk = ME.get_block_chunk_key(node)
-            _,cy = nchunk:match("(-?%d+)_(-?%d+)")
+            cx,cy = nchunk:match("(-?%d+)_(-?%d+)")
         elseif type(node) == "string" then
-            _,cy = node:match("(-?%d+)_(-?%d+)")
+            cx,cy = node:match("(-?%d+)_(-?%d+)")
         end
         --惩罚比起点小的区块
-        return math.max(0, scy - cy)
+        return math.max(0, scy - cy, -cx )
     end
     config.get_neighbors_func = function(node)
         return ME.get_block_neighbors(node)
@@ -143,10 +151,12 @@ function BigFind:find(sx,sy)
         end
         return false
     end
-
+    print("[BigFind]Config setup successful " .. string.format("Player's connected block %.0f",config.start))
     self.path = AStar(config) or {}
     self.is_finding = true
     self.path_index = 1
+
+    print("[BigFind]Path finding finished.")
 end
 function BigFind:move(player,find)
     local x,y = player:get_pos()
@@ -157,12 +167,14 @@ function BigFind:move(player,find)
     end
     if #self.path > 1 then
         --检查是否寻路成功
-        if self.path_index > #self.path then
+        if self.path_index >= #self.path then
             self:refresh()
             return true
         end
         local curr_node = self.path[self.path_index]
         local next_node = self.path[self.path_index+1]
+
+
         --委托给小Find
         if SmallFind:move(player,curr_node,next_node,is_change) then
             self.path_index = self.path_index + 1
@@ -176,6 +188,9 @@ end
 ---@param sx number
 ---@param sy number
 function SmallFind:find(nodes,target_nodes,sx,sy)
+
+    print("[SmallFind]Finding path...")
+
     local config = AStarConfig:new()
 
     config.start = {x=sx,y=sy}
@@ -204,7 +219,32 @@ function SmallFind:find(nodes,target_nodes,sx,sy)
         return neighbors
     end
     config.get_cost = function(from_node, to_node)
-        local loss = 0 
+        local loss = 0
+        if (RaytracePlatforms(from_node.x,from_node.y,to_node.x,to_node.y)) then
+            return node_size/0.00001
+        end
+        --5射线检查
+        local point= {
+            {-3, -8}, {3, -8}, {-3, 8}, {3, 8}
+        }
+        local count = 0 
+        for _,v in ipairs(point) do
+            local bx = RaytracePlatforms(from_node.x + v[1], from_node.y + v[2], to_node.x + v[1], to_node.y + v[2])
+            if bx then
+                count = count + 1
+            end
+        end
+        --0条射线完美，1条命中可接受，2条命中难以接受，3以上无法接受
+        if count == 0 then
+            loss = 0 
+        elseif count == 1 then
+            loss = node_size / 0.5
+        elseif count == 2 then
+            loss =  node_size /0.1 
+        else
+            return node_size/0.00001
+        end
+
         --计算两个节点
         local dx =  to_node.x - from_node.x 
         local dy  = to_node.y -from_node.y
@@ -225,6 +265,8 @@ function SmallFind:find(nodes,target_nodes,sx,sy)
     self.path = AStar(config) or {}
     self.is_finding = true
     self.path_index = 1
+
+    print("[SmallFind]Path finding finished.")
 end
 ---@param from_node string|number
 ---@param to_node string|number
@@ -233,14 +275,20 @@ function SmallFind:move(player,from_node, to_node,is_change)
     local x,y = player:get_pos()
     if self.is_finding == false or is_change == true then
         local target_nodes =  ME.get_block_edge(from_node, to_node)
+        
         local block_id,sx,sy = find_near_block(x,y)
         if not (block_id and sx and sy) then
             error("[SmallFind]block_id error")
             return
         end
-
         local nodes = blocks_nodes[block_id]
+
+        print("[SmallFind]Path finding started, received delegation info: " .. string.format("Nodes " .. from_node .. "--->" .. to_node))
+
         self:find(nodes,target_nodes,sx,sy)
+
+        debug_all_nodes = nodes
+        debug_target_nodes = target_nodes
     end
     --移动
     if #self.path > 0 then
@@ -269,7 +317,7 @@ end
 ---主控制状态的接口表
 ---@class FindPathMain
 ---@field is_finding boolean 是否正在执行寻路
----@field debug table 调试信息
+---@field debug FindPath_Debug 调试信息
 local M = {
     is_finding = false,
     
@@ -305,13 +353,22 @@ local function nodes_to_nodes(nodes)
     end
     return ret
 end
+
+
+---@class FindPath_Debug
+---@field path_nodes function
+---@field index  function
+---@field curr_chunk_key  function
 M.debug = {
     path_nodes = function ()
         return SmallFind.path
     end,
-    -- get_target_nodes = function ()
-    --     return nodes_to_nodes(Big_find.blocks_nodes)
-    -- end,
+    target_nodes = function ()
+        return nodes_to_nodes(debug_target_nodes)
+    end,
+    all_nodes = function ()
+        return nodes_to_nodes(debug_all_nodes)
+    end,
     index = function ()
         return SmallFind.path_index
     end,
