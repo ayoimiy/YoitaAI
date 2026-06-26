@@ -69,9 +69,11 @@ local Directions = {
     BOTTOM = Direction:new(0,1)
 }
 
+    --#region NodeSet
+
 ---@class NodeSet
----@field count number
 ---@field nodes table<number,boolean>
+---@field count number
 local NodeSet = data_class()
 ---@return NodeSet
 function NodeSet:new()
@@ -81,86 +83,83 @@ function NodeSet:new()
     },NodeSet)
     return obj
 end
----注意节点必须大于初始坐标
----@param x number  节点x
----@param y number  节点y
----@param sx number     区块起始x
----@param sy number     区块起始y
----@return number
 function NodeSet:add(x,y,sx,sy)
-    local dx = x - sx 
-    local dy = y - sy
-    dx = math.floor(dx / node_size) * node_size
-    dy = math.floor(dy / node_size) * node_size
-    local id = dx + dy * width_num
-    self.nodes[id] = true
-    self.count = self.count + 1
+    local id = NodeSet.get_id(x,y,sx,sy)
+    self:add_from_id(id)
     return id
 end
----获取实际坐标
----@param id number
----@return number,number
-function NodeSet:get_pos(id,sx,sy)
-    local dx = id % width_num
-    local dy = math.floor(id / node_size)
-    return dx + sx, dy + sy
+function NodeSet:add_from_id(id)
+    self.nodes[id] = false
+    self.count = self.count + 1
 end
----获取节点状态
 ---@param id number
----@return boolean state
+---@param chunk_id number
+---@return number,number
+function NodeSet.get_pos(id,chunk_id)
+    local chunk = Chunk_data[chunk_id]
+    local sx,sy = chunk:get_pos()
+    local ix = id % width_num
+    local iy = math.floor(id / width_num)
+    return ix * node_size + sx, iy * node_size + sy
+end
+function NodeSet.get_id(x,y,sx,sy)
+    local ix = math.floor((x - sx) / node_size)
+    local iy = math.floor((y - sy) / node_size)
+    return ix + iy * width_num
+end
+---@param id number
+---@return boolean|nil
 function NodeSet:get_state(id)
     return self.nodes[id]
 end
----修改节点状态
----@param id number
----@return boolean ok
-function NodeSet:set_state(id)
-    if self.nodes[id] then
-        self.nodes[id] = false
+function NodeSet:set_state(id,state)
+    if self.nodes[id] ~= nil then
+        self.nodes[id] = state
         return true
     else
         return false
     end
 end
+--曼巴顿距离
+---@param id1 number
+---@param id2 number
+---@return number
+function NodeSet.get_ditantce(id1,id2)
+    local ix1 = id1 % width_num
+    local iy1 = math.floor(id1 / width_num)
+    local ix2 = id2 % width_num
+    local iy2 = math.floor(id2 / width_num)
+    return math.abs(ix1-ix2) + math.abs(iy1-iy2)
+end
 ---获取邻居
 ---@param id number
 ---@return number[] neighbors
 function NodeSet:get_neighbors(id)
-    local dx = id % width_num
-    local dy = math.floor(id / node_size)
     local neighbors = {}
     for _,v in pairs(Directions) do
-        local nx = dx + v.dx * node_size
-        local ny = dy + v.dy * node_size
-        local key = nx + ny * width_num
-        if self.nodes[key] ~= nil then
-            table.insert(neighbors,key)
+        --id 是节点索引编码，Direction.dx/dy 为 -1/0/1，直接相加即可
+        local nid = id + v.dx + v.dy * width_num
+        if self.nodes[nid] ~= nil then
+            table.insert(neighbors,nid)
         end
     end
     return neighbors
 end
-local edge = {
-    {1,0,width_num-2,0}, --上边
-    {0,1,0,height_num-2}, --左边
-    {width_num -1,1,width_num-1,height_num-2}, --下边
-    {1,height_num -1 ,width_num-2,height_num -1} --右边
-}
----获取边集
----@return number[]
-function NodeSet:get_edges()
-    local edge_set = {}
-    for _,v in ipairs(edge) do
-        for x = v[1],v[3],1 do
-            for y = v[2],v[4],1 do
-                local key = x  + y * width_num
-                if self.nodes[key] ~= nil then
-                    table.insert(edge_set,key)
-                end
-            end            
-        end
+---将内部 nodes 转为 {["x_y"] = boolean} 格式
+---@param chunk_id number
+---@return table<string,boolean>
+function NodeSet:to_nodes(chunk_id)
+    local out = {}
+    for id, state in pairs(self.nodes) do
+        local x, y = NodeSet.get_pos(id, chunk_id)
+        out[x .. "_" .. y] = state
     end
-    return edge_set
+    return out
 end
+    --#endregion
+
+
+
 --#endregion
 
 --#region local函数(不依赖类)
