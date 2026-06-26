@@ -131,31 +131,39 @@ function NodeSet.get_ditantce(id1,id2)
     local iy2 = math.floor(id2 / width_num)
     return math.abs(ix1-ix2) + math.abs(iy1-iy2)
 end
----获取邻居
+---获取邻居，
 ---@param id number
 ---@return number[] neighbors
 function NodeSet:get_neighbors(id)
     local neighbors = {}
+    local ix = id % width_num
+    local iy = math.floor(id / width_num)
     for _,v in pairs(Directions) do
-        --id 是节点索引编码，Direction.dx/dy 为 -1/0/1，直接相加即可
-        local nid = id + v.dx + v.dy * width_num
-        if self.nodes[nid] ~= nil then
-            table.insert(neighbors,nid)
+        local nix = ix + v.dx
+        local niy = iy + v.dy
+        if nix >= 0 and nix < width_num and niy >= 0 and niy < height_num then
+            local nid = nix + niy * width_num
+            if self.nodes[nid] ~= nil then
+                table.insert(neighbors,nid)
+            end
         end
     end
     return neighbors
 end
 ---将内部 nodes 转为 {["x_y"] = boolean} 格式
----@param chunk_id number
+---@param sx number 区块原点x
+---@param sy number 区块原点y
 ---@return table<string,boolean>
-function NodeSet:to_nodes(chunk_id)
+function NodeSet:to_nodes(sx, sy)
     local out = {}
     for id, state in pairs(self.nodes) do
-        local x, y = NodeSet.get_pos(id, chunk_id)
-        out[x .. "_" .. y] = state
+        local ix = id % width_num
+        local iy = math.floor(id / width_num)
+        out[ix * node_size + sx .. "_" .. iy * node_size + sy] = state
     end
     return out
 end
+
     --#endregion
 
 
@@ -182,19 +190,25 @@ local function raytrace5(nodeA,nodeB)
     return true
 end
 --寻找相连通的点集
----@param nodes table<string,boolean> 所有符合条件的节点集合
+---@param nodes NodeSet 所有符合条件的节点集合
 ---@param edge_set table<string,boolean> 边节点集合
 ---@param start_node table 开始点
----@param node_size number 节点大小
-local function bfs(nodes,edge_set,start_node,node_size)
+---@param sx number 区块原点x
+---@param sy number 区块原点y
+local function bfs(nodes,edge_set,start_node,sx,sy)
     local Component = {}
     -- 创建队列
     local queue = {}
     -- 从起点出发
     table.insert(queue,start_node)
-    local s_key = start_node.x.."_"..start_node.y
-    nodes[s_key] = true
+    local id = NodeSet.get_id(start_node.x,start_node.y,sx,sy)
+    nodes:set_state(id, true)
+
+    -- nodes = nodes:to_nodes(sx,sy)
+
+    local s_key = start_node.x .. "_" .. start_node.y
     Component[s_key] = true
+
 
     local count = 0
 
@@ -206,17 +220,25 @@ local function bfs(nodes,edge_set,start_node,node_size)
         for k,dir in pairs(dirs) do
             local nx = node.x + dir.dx * node_size
             local ny = node.y + dir.dy * node_size
+
+            if nx < sx or nx > sx + width or ny < sy or ny > sy + height then
+                goto continue  -- 或用 if-else
+            end
+
             local key = nx.."_"..ny
             local n_node = {x = nx,y = ny}
-            if nodes[key] == false and raytrace5(node,n_node) then
+            local nid = NodeSet.get_id(nx,ny,sx,sy)
+            if nodes:get_state(nid) == false  and raytrace5(node,n_node) then
                 --检查是不是两个都是边界点
                 if not (edge_set[key] and edge_set[node.x .. "_" .. node.y]) then
                     table.insert(queue,n_node)
-                    nodes[key] = true
+                    -- nodes[key] = true
+                    nodes:set_state(nid,true)
                     Component[key] = true
                     count = count + 1
                 end 
             end
+            ::continue::
         end
     end
     if count < 2 then
@@ -423,15 +445,16 @@ function Chunk:get_edge_nodes()
     return nodes
 end
 ---将区块内的点转化为节点集
+---@return NodeSet nodes
 function Chunk:to_nodes()
     local sx = self.cx * width
     local sy = self.cy * height
-    local nodes = {}
+    local nodes = NodeSet:new()
     for y = sy,sy + height,node_size do 
         for x = sx,sx + width,node_size do
             local node_key = x .. "_" .. y
             if check_node(node_key) then
-                nodes[node_key] = false
+                nodes:add(x,y,sx,sy)
             end
         end
     end
@@ -441,18 +464,30 @@ end
 ---@param edge_set table 边节点集
 function Chunk:get_nodes(edge_set)
     local comps = {}
-    local nodes = self:to_nodes()
+
     local sx,sy = self.cx * width,self.cy * height
+    local nodes = self:to_nodes()
     --只遍历内部点，边界点由内部点bfs获取
-    for y = sy + node_size,sy + height - node_size,node_size do 
+    for y = sy + node_size,sy + height - node_size,node_size do
         for x = sx + node_size,sx + width - node_size,node_size do
-            if nodes[ tostring(x).."_"..tostring(y)] == false then
-               local comp = bfs(nodes,edge_set,{x = x,y = y},node_size)
+            local id = NodeSet.get_id(x,y,sx,sy)
+            if nodes:get_state(id) == false then
+               local comp = bfs(nodes,edge_set,{x = x,y = y},sx,sy)
                if comp ~= nil then
                     table.insert(comps,comp)
                end
-            end  
+            end
         end
+    end
+    print("[DEBUG] get_nodes: chunk " .. self.cx .. "_" .. self.cy .. " -> " .. #comps .. " components, nodes total=" .. nodes.count)
+    -- 打印第一个 component 的前 5 个 key
+    if #comps > 0 then
+        local keys = {}
+        for k,_ in pairs(comps[1]) do
+            table.insert(keys, k)
+            if #keys >= 5 then break end
+        end
+        print("[DEBUG] comp[1] sample: " .. table.concat(keys, ", "))
     end
     return comps
 end

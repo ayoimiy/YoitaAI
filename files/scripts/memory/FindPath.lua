@@ -53,6 +53,12 @@ local Move_no_path = function (player)
     controls.mButtonDownRight = false
     controls.mButtonDownLeft  = false
 end
+-- helper for debug
+local function table_length(t)
+    local c = 0
+    for _,_ in pairs(t) do c = c + 1 end
+    return c
+end
 ---@param x number
 ---@param y number
 ---@return number|nil block_id,number|nil nx,number|nil ny
@@ -66,6 +72,7 @@ local function find_near_block(x,y)
             return block_id,nx,ny
         end
     end
+    print("[DEBUG] find_near_block: key=" .. key .. " not found in " .. table_length(blocks_nodes) .. " blocks")
 end
 
 
@@ -331,10 +338,13 @@ function M.update(player)
     local cc_key = ME.get_chunk_key(x,y)
     local set = {}
     local is_change = false
-    if cc_key ~= curr_chunk_key then 
+    if cc_key ~= curr_chunk_key then
         set,is_change = ME.Floor_fill(cc_key)
         curr_chunk_key = cc_key
         blocks_nodes = set
+        local count = 0
+        for _,_ in pairs(blocks_nodes) do count = count + 1 end
+        print("[DEBUG] Floor_fill returned " .. count .. " blocks for chunk " .. cc_key .. " (player at " .. math.floor(x) .. "," .. math.floor(y) .. ")")
     end
     if M.is_finding then
         BigFind:move(player,is_change)
