@@ -11,8 +11,10 @@ local node_size = 8
 local max_dist = 75
 
 local curr_chunk_key = nil
+---@type table<number,NodeSet>
 local blocks_nodes = {}
 
+local Is_change = false
 --#endregion
 
 --#region 局部函数
@@ -68,20 +70,19 @@ local function find_near_block(x,y)
     local ny = math.floor(y/node_size) * node_size
     local key = nx .. "_" .. ny
     for block_id,nodes in pairs(blocks_nodes) do
-        if nodes[key] ~= nil then
+        if nodes:exist2(x,y,curr_chunk_key) then
             return block_id,nx,ny
         end
     end
+    --如果找不到block_id,说明玩家偏离，尝试重寻路
+    Is_change = true
+
     print("[DEBUG] find_near_block: key=" .. key .. " not found in " .. table_length(blocks_nodes) .. " blocks")
 end
-
 
 --#endregion
 
 --#region 类的定义
-
-
-
 
 ---@class FindPath
 ---@field find function 寻路函数
@@ -123,9 +124,7 @@ local SmallFind = FindPath:new()
     实现大寻路
 ]]
 function BigFind:find(sx,sy)
-
     print("[BigFind]Start finding path... " .. string.format("Player matched coordinates: %.0f,%.0f",sx,sy))
-
     local config = AStarConfig:new()
     config.start = find_near_block(sx,sy)
     if config.start == nil then
@@ -198,29 +197,9 @@ end
 ---@param sx number
 ---@param sy number
 function SmallFind:find(nodes,target_nodes,sx,sy)
-
-    print("[SmallFind]Finding path...")
-
-    local _count = 0 
-    for k,v in pairs(nodes) do
-        _count = _count + 1
-    end
-    print("[SmallFind]Total nodes:",_count)
-    _count = 0
-    for k,v in pairs(target_nodes) do
-        if nodes[k] ~= nil then
-            _count = _count + 1
-        end
-       
-    end
-    print("[SmallFind]Total target nodes:",_count)
-    print("[SmallFind]Starting..." .. "start:".. sx .. ":" .. sy)
-
-
     local config = AStarConfig:new()
-
     config.start = {x=sx,y=sy}
-    config.max_count = 3000
+    config.max_count = 1000
     config.get_node_key = function(node)
         return node.x.."_"..node.y
     end
@@ -284,23 +263,10 @@ function SmallFind:find(nodes,target_nodes,sx,sy)
         end
         return false
     end
-    local path,nodes_set = AStar(config)
+    local path = AStar(config)
     self.path = path or {}
     self.is_finding = true
     self.path_index = 1
-
-    -- local str = ""
-    -- for k,v in pairs(nodes_set or {}) do
-    --     str = str .. k  .. "  "
-    -- end
-    -- print("[SmallFind] all_node_find " .. str)
-    -- str = ""
-    -- for k,v in pairs(target_nodes) do
-    --     str = str .. k ..  "  "
-    -- end
-    -- print("[SmallFind] target_node_find " .. str)
-
-
     print("[SmallFind]Path finding finished." .. "Path length:" .. #self.path)
 end
 ---@param from_node string|number
@@ -319,42 +285,8 @@ function SmallFind:move(player,from_node, to_node,is_change)
         local nodes = blocks_nodes[block_id]
 
         print("[SmallFind]Path finding started, received delegation info: " .. string.format("Nodes " .. from_node .. "--->" .. to_node))
-        -- debug
-        local tcount = 0
-        for _,_ in pairs(target_nodes) do tcount = tcount + 1 end
-        local ncount = 0
-        for _,_ in pairs(nodes) do ncount = ncount + 1 end
-        local start_key = sx .. "_" .. sy
-        print("[SmallFind] target_nodes=" .. tcount .. " nodes=" .. ncount .. " start_in_nodes=" .. tostring(nodes[start_key] ~= nil))
-        -- 检查前3个目标是否在 walkable 中
-        local i = 0
-        for k,_ in pairs(target_nodes) do
-            if i < 3 then
-                print("[SmallFind] target[" .. i .. "]=" .. k .. " in_nodes=" .. tostring(nodes[k] ~= nil))
-                i = i + 1
-            end
-        end
-        -- 检查 walkable 中是否有右边界的节点（x=256）
-        local edge_count = 0
-        for k,_ in pairs(nodes) do
-            local x = tonumber(k:match("(-?%d+)_"))
-            if x and x == 256 then edge_count = edge_count + 1 end
-        end
-        print("[SmallFind] nodes at x=256: " .. edge_count)
-        -- 检查从起点往右第一跳
-        local right_key = (sx + node_size) .. "_" .. sy
-        if nodes[right_key] then
-            local cost_test = 0
-            if RaytracePlatforms(sx, sy, sx + node_size, sy) then
-                print("[SmallFind] right_step=" .. right_key .. " RAYTRACE_BLOCKED")
-            else
-                print("[SmallFind] right_step=" .. right_key .. " clear")
-            end
-        else
-            print("[SmallFind] right_step=" .. right_key .. " NOT_IN_NODES")
-        end
-
-        self:find(nodes,target_nodes,sx,sy)
+     
+        self:find(nodes:to_nodes2(curr_chunk_key),target_nodes,sx,sy)
 
         debug_all_nodes = nodes
         debug_target_nodes = target_nodes
@@ -378,7 +310,6 @@ function SmallFind:move(player,from_node, to_node,is_change)
     return false
 end
 
-
 --#endregion
 
 --#region 对外接口
@@ -396,18 +327,21 @@ function M.update(player)
     --计算当前区间
     local cc_key = ME.get_chunk_key(x,y)
     local set = {}
-    local is_change = false
+
+  
     if cc_key ~= curr_chunk_key then
-        set,is_change = ME.Floor_fill(cc_key)
+        set,Is_change = ME.Floor_fill(cc_key)
         curr_chunk_key = cc_key
         blocks_nodes = set
         local count = 0
-        for _,_ in pairs(blocks_nodes) do count = count + 1 end
-        print("[DEBUG] Floor_fill returned " .. count .. " blocks for chunk " .. cc_key .. " (player at " .. math.floor(x) .. "," .. math.floor(y) .. ")")
+        for k,v in pairs(set) do
+            count = count + 1
+        end
+        print("[DEBUG] Floor_fill returned " .. count  .. " blocks for chunk " .. cc_key .. " (player at " .. math.floor(x) .. "," .. math.floor(y) .. ")")
     end
     if M.is_finding then
-        BigFind:move(player,is_change)
-        is_change = false
+        BigFind:move(player,Is_change)
+        Is_change = false
     end
 end
 
@@ -425,8 +359,6 @@ local function nodes_to_nodes(nodes)
     end
     return ret
 end
-
-
 ---@class FindPath_Debug
 ---@field path_nodes function
 ---@field index  function

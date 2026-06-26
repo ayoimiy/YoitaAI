@@ -137,6 +137,16 @@ end
 function NodeSet:exist(id)
     return self.nodes[id] ~= nil
 end
+---@param x number
+---@param y number
+---@return boolean
+function NodeSet:exist2(x,y,chunk_id)
+    local chunk = Chunk_data[chunk_id]
+    local sx,sy = chunk.cx * width, chunk.cy * height
+    local id = NodeSet.get_id(x,y,sx,sy)
+    return self.nodes[id] ~= nil
+end
+
 
 --曼巴顿距离
 ---@param id1 number
@@ -181,6 +191,20 @@ function NodeSet:to_nodes(sx, sy)
     end
     return out
 end
+
+function NodeSet:to_nodes2(chunk_id)
+    local out = {}
+    local chunk = Chunk_data[chunk_id]
+    local sx,sy = chunk.cx * width, chunk.cy * height
+    for id, state in pairs(self.nodes) do
+        local ix = id % width_num
+        local iy = math.floor(id / width_num)
+        out[ix * node_size + sx .. "_" .. iy * node_size + sy] = state
+    end
+    return out
+end
+
+
 local edge = {
     {dir = Directions.BOTTOM, offset = {1 , height_num - 1, width_num - 2, height_num -1 }}, 
     {dir = Directions.RIGHT, offset = {width_num - 1, 1, width_num - 1, height_num - 2}},
@@ -269,9 +293,6 @@ local function decode_edge_key(key,dir)
     return edge_nodes
 end
     --#endregion
-
-
-
 --#endregion
 
 --#region local函数(不依赖类)
@@ -374,118 +395,6 @@ function Chunk:init(cx,cy)
     self.blocks = {}
 end
 
----节点 key -> 周长位索引 (0..127)
----周长线性化(128位): 顶边(0..32) | 右边去顶角(33..64) | 底边去右角(65..96) | 左边去底角和顶角(97..127)
----@param key string "x_y"
----@param start_x number 区块起始x
----@param start_y number 区块起始y
----@return number bit_index 0..127
-local function node_to_bit(key, start_x, start_y)
-    local nx, ny = key:match("(-?%d+)_(-?%d+)")
-    nx, ny = tonumber(nx), tonumber(ny)
-    local end_x = start_x + width
-    local end_y = start_y + height
-    if ny == start_y and nx >= start_x and nx <= end_x then
-        return (nx - start_x) / node_size              --顶边 0..32
-    elseif nx == end_x and ny >= start_y and ny <= end_y then
-        return 32 + (ny - start_y) / node_size          --右边 33..64
-    elseif ny == end_y and nx >= start_x and nx <= end_x then
-        return 64 + (end_x - nx) / node_size            --底边 65..96
-    elseif nx == start_x and ny >= start_y and ny <= end_y then
-        return 96 + (end_y - ny) / node_size            --左边 97..127
-    end
-    return -1   --非周长节点
-end
-
----边点子集 -> 16 字节二进制位掩码(128位周长)
----@param edge_set table { [node_key] = true }
----@param start_x number 区块起始x
----@param start_y number 区块起始y
----@return string 16 字节二进制串
-local function edge_set_to_mask(edge_set, start_x, start_y)
-    local bytes = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}
-    for key in pairs(edge_set) do
-        local bit_idx = node_to_bit(key, start_x, start_y)
-        if bit_idx >= 0 and bit_idx < 128 then   --守卫:跳过非周长节点
-            local byte_idx = math.floor(bit_idx / 8) + 1
-            local bit_in_byte = bit_idx % 8
-            bytes[byte_idx] = bytes[byte_idx] + (2 ^ bit_in_byte)
-        end
-    end
-    return string.char(bytes[1],bytes[2],bytes[3],bytes[4],
-                       bytes[5],bytes[6],bytes[7],bytes[8],
-                       bytes[9],bytes[10],bytes[11],bytes[12],
-                       bytes[13],bytes[14],bytes[15],bytes[16])
-end
-
----边点集掩码 -> 点集
----当指定 edge 时返回 { [node_key] = true } 单边 set
----当不传 edge 时返回 { top={}, right={}, bottom={}, left={} } 四边结构
----@param mask string 16 字节二进制串
----@param start_x number 区块起始x
----@param start_y number 区块起始y
----@param dir Direction
----@return table<string,boolean>
-local function mask_to_edge_set(mask, start_x, start_y, dir)
-    local end_x = start_x + width
-    local end_y = start_y + height
-    local ns = node_size
-
-    local single = dir ~= nil
-    local result = {}
-    for byte_idx = 1, 16 do
-        local byte_val = string.byte(mask, byte_idx)
-        if byte_val and byte_val > 0 then
-            for bit_in_byte = 0, 7 do
-                if math.floor(byte_val / (2 ^ bit_in_byte)) % 2 == 1 then
-                    local bit_idx = (byte_idx - 1) * 8 + bit_in_byte
-                    local edge_dir
-
-                    if bit_idx < 32 and bit_idx > 0 then
-                        edge_dir = Directions.TOP
-                    elseif bit_idx < 64 and bit_idx > 32 then
-                        edge_dir = Directions.RIGHT
-                    elseif bit_idx < 96 and bit_idx > 64 then
-                        edge_dir = Directions.BOTTOM
-                    elseif bit_idx < 128 and bit_idx > 96 then
-                        edge_dir = Directions.LEFT
-                    end
-
-                    --单边模式: 跳过不匹配的位
-                    if single and edge_dir ~= dir then
-                        goto continue
-                    end
-
-                    local nx, ny
-                    if edge_dir == Directions.TOP then
-                        nx = start_x + bit_idx * ns
-                        ny = start_y
-                    elseif edge_dir == Directions.RIGHT then
-                        nx = end_x
-                        ny = start_y + (bit_idx - 32) * ns
-                    elseif edge_dir == Directions.BOTTOM then
-                        nx = end_x - (bit_idx - 64) * ns
-                        ny = end_y
-                    elseif edge_dir == Directions.LEFT then
-                        nx = start_x
-                        ny = end_y - (bit_idx - 96) * ns
-                    else
-                        --如果是角点，则跳过
-                        goto continue
-                    end
-
-                    if single then 
-                        result[tostring(nx).."_"..tostring(ny)] = true
-                    end
-                end
-                ::continue::
-            end
-        end
-    end
-
-    return result
-end
-
 ---获取区块pos
 ---@param x number
 ---@param y number
@@ -505,28 +414,7 @@ function Chunk.get_key(x,y)
     return chunk_key
 end
 
---获取边节点
----@return table<string,table<string,boolean>>
-function Chunk:get_edge_nodes()
-    local sx,sy = self.cx * width,self.cy * height
-    local Edge = {
-        LEFT = {sx,sy,sx,sy+height},
-        RIGHT = {sx+width,sy,sx+width,sy+height},
-        TOP = {sx,sy,sx+width,sy},
-        BOTTOM = {sx,sy+height,sx+width,sy+height}
-    }
-    local nodes = {}
-    for k,v in pairs(Edge) do
-        local dir = Directions[k]:tostring()
-        nodes[dir] = {}
-        for x = v[1],v[3],node_size do
-            for y = v[2],v[4],node_size do
-                nodes[dir][tostring(x).."_"..tostring(y)] = true
-            end
-        end
-    end
-    return nodes
-end
+
 ---将区块内的点转化为节点集
 ---@return NodeSet nodes
 function Chunk:to_nodes()
@@ -561,28 +449,6 @@ function Chunk:get_nodes()
     end
     return comps
 end
---获取边集key
----@param edge_set table 区块的边节点集
----@param nodes table 尚未分配的节点集
----@return string key 边节点mask
-function Chunk:nodes_get_edge_key(edge_set,nodes)
-    local sx = self.cx * width
-    local sy = self.cy * height
-    local edge_nodes = {}
-    for node,_ in pairs(nodes) do 
-        for _,dir in pairs(Directions) do 
-            local edge = dir:tostring()
-            if edge_set[edge][node] then
-                --若节点在边集内
-                edge_nodes[node] = true
-            end
-        end
-    end
-    local key = edge_set_to_mask(edge_nodes,sx,sy)
-    return key
-end
-
-
 
 
 
@@ -601,14 +467,6 @@ function Block:init(hash_key,chunk_key)
     self.id = Get_Block_id()
     self.neighbors = {}
 end
----@param dir Direction
----@return table<string,boolean>nodes 
-function Block:get_edge(dir)
-    local chunk_key = self.chunk_key
-    local chunk = Chunk_data[chunk_key]
-    return mask_to_edge_set(self.hash_key,chunk.cx * width,chunk.cy * height,dir)
-end
-
 
 --#endregion
 
@@ -656,8 +514,6 @@ local function Create_new_blocks(block_fps,chunk_key)
             local nblocks = nchunk.blocks
             for _,nblock_id in ipairs(nblocks) do 
                 local nblock = Block_data[nblock_id]
-                -- local nedge_set = nblock:get_edge(-dir)
-                -- local edge_set = block:get_edge(dir)
 
                 local nedge_set =  decode_edge_key(nblock.hash_key,-dir)
                 local edge_set = decode_edge_key(block.hash_key,dir)
@@ -699,7 +555,7 @@ end
 
 
 ---@param chunk_key string 区间key
----@return  table blocks_nodes,boolean is_change
+---@return  table<number,NodeSet> blocks_nodes,boolean is_change
 local function floor_fill(chunk_key)
     --获取区块
     local chunk = Chunk_data[chunk_key]
@@ -709,12 +565,7 @@ local function floor_fill(chunk_key)
         Chunk_data[chunk_key] = chunk
     end
 
-
-    local sx,sy = chunk.cx * width,chunk.cy * height
-
-
     local is_change = false
-    local edge_set = chunk:get_edge_nodes()
     local comps = chunk:get_nodes()
     --记录新连通点集的边指纹
     local comps_fps = {}
@@ -764,7 +615,7 @@ local function floor_fill(chunk_key)
         end
         
         new_block_ids[i] = block_id
-        blocks_nodes[block_id] = v:to_nodes(sx,sy)
+        blocks_nodes[block_id] = v
     end
     chunk.blocks = new_block_ids
 
