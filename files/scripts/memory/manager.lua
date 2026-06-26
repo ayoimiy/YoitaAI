@@ -95,9 +95,7 @@ end
 ---@param id number
 ---@param chunk_id number
 ---@return number,number
-function NodeSet.get_pos(id,chunk_id)
-    local chunk = Chunk_data[chunk_id]
-    local sx,sy = chunk:get_pos()
+function NodeSet.get_pos(id,sx,sy)
     local ix = id % width_num
     local iy = math.floor(id / width_num)
     return ix * node_size + sx, iy * node_size + sy
@@ -200,7 +198,7 @@ local function bfs(nodes,edge_set,start_node,sx,sy)
     -- 创建队列
     local queue = {}
     -- 从起点出发
-    table.insert(queue,start_node)
+    table.insert(queue,NodeSet.get_id(start_node.x,start_node.y,sx,sy))
     local id = NodeSet.get_id(start_node.x,start_node.y,sx,sy)
     nodes:set_state(id, true)
 
@@ -209,36 +207,33 @@ local function bfs(nodes,edge_set,start_node,sx,sy)
     local s_key = start_node.x .. "_" .. start_node.y
     Component[s_key] = true
 
-
+   
     local count = 0
 
     while #queue > 0 do
         --取出一个节点
         local node = table.remove(queue,1)
         local dirs =  Directions
+        local neighbors = nodes:get_neighbors(node)
+
+        local x,y = NodeSet.get_pos(node,sx,sy)
         --寻找邻居节点
-        for k,dir in pairs(dirs) do
-            local nx = node.x + dir.dx * node_size
-            local ny = node.y + dir.dy * node_size
-
-            if nx < sx or nx > sx + width or ny < sy or ny > sy + height then
-                goto continue  -- 或用 if-else
-            end
-
-            local key = nx.."_"..ny
-            local n_node = {x = nx,y = ny}
-            local nid = NodeSet.get_id(nx,ny,sx,sy)
-            if nodes:get_state(nid) == false  and raytrace5(node,n_node) then
+        for k,n_node in pairs(neighbors) do
+            local nx,ny = NodeSet.get_pos(n_node,sx,sy) 
+            if nodes:get_state(n_node) == false  and raytrace5({x=x,y=y},{x=nx,y=ny}) then
                 --检查是不是两个都是边界点
-                if not (edge_set[key] and edge_set[node.x .. "_" .. node.y]) then
+                
+                local key = nx .. "_" .. ny
+                local nkey = x .. "_" .. y
+                if not (edge_set[key] and edge_set[nkey]) then
                     table.insert(queue,n_node)
                     -- nodes[key] = true
-                    nodes:set_state(nid,true)
+                    nodes:set_state(n_node,true)
                     Component[key] = true
                     count = count + 1
                 end 
             end
-            ::continue::
+     
         end
     end
     if count < 2 then
