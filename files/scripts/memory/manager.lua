@@ -93,7 +93,8 @@ function NodeSet:add_from_id(id)
     self.count = self.count + 1
 end
 ---@param id number
----@param chunk_id number
+---@param sx number
+---@param sy number
 ---@return number,number
 function NodeSet.get_pos(id,sx,sy)
     local ix = id % width_num
@@ -118,6 +119,12 @@ function NodeSet:set_state(id,state)
         return false
     end
 end
+---@return boolean exist 是否存在该节点
+function NodeSet:exist(id)
+    return self.nodes[id] ~= nil
+end
+
+
 --曼巴顿距离
 ---@param id1 number
 ---@param id2 number
@@ -162,6 +169,44 @@ function NodeSet:to_nodes(sx, sy)
     return out
 end
 
+local edge = {
+    {dir = Directions.BOTTOM, offset = {1 , height_num - 1, width_num - 2, height_num -1 }}, 
+    {dir = Directions.RIGHT, offset = {width_num - 1, 1, width_num - 1, height_num - 2}},
+    {dir = Directions.TOP, offset = {1, 0, width_num - 2, 0}},
+    {dir = Directions.LEFT, offset = {0, 1, 0, height_num - 2}},
+}
+
+---@return NodeSet
+function NodeSet:get_edges_nodes()
+    local out = NodeSet:new()
+    for i,v in ipairs(edge) do 
+        local offset = v.offset
+        for x = offset[1], offset[3] do
+            for y = offset[2], offset[4] do
+                local id = x + y * width_num
+                if self:exist(id) then
+                    out:add_from_id(id)
+                end
+            end
+        end
+    end
+    return out
+end
+---@return NodeSet
+function NodeSet:get_inner_nodes()
+    local out = NodeSet:new()
+    for x = 1,width_num - 2 do
+        for y = 1,height_num - 2 do
+            local id = x + y * width_num
+            if self:exist(id) then
+                out:add_from_id(id)
+            end
+        end 
+    end
+    return out
+end
+
+
     --#endregion
 
 
@@ -189,55 +234,37 @@ local function raytrace5(nodeA,nodeB)
 end
 --寻找相连通的点集
 ---@param nodes NodeSet 所有符合条件的节点集合
----@param edge_set table<string,boolean> 边节点集合
----@param start_node table 开始点
+---@param edge_set NodeSet 边节点集合
+---@param start_node number 开始点id
 ---@param sx number 区块原点x
 ---@param sy number 区块原点y
+---@return NodeSet comp 连通点集
 local function bfs(nodes,edge_set,start_node,sx,sy)
-    local Component = {}
+    local Component = NodeSet:new()
     -- 创建队列
     local queue = {}
     -- 从起点出发
-    table.insert(queue,NodeSet.get_id(start_node.x,start_node.y,sx,sy))
-    local id = NodeSet.get_id(start_node.x,start_node.y,sx,sy)
-    nodes:set_state(id, true)
+    table.insert(queue,start_node)
 
-    -- nodes = nodes:to_nodes(sx,sy)
-
-    local s_key = start_node.x .. "_" .. start_node.y
-    Component[s_key] = true
-
-   
-    local count = 0
-
+    nodes:set_state(start_node, true)
+    Component:add_from_id(start_node)
     while #queue > 0 do
         --取出一个节点
         local node = table.remove(queue,1)
-        local dirs =  Directions
         local neighbors = nodes:get_neighbors(node)
-
         local x,y = NodeSet.get_pos(node,sx,sy)
         --寻找邻居节点
         for k,n_node in pairs(neighbors) do
             local nx,ny = NodeSet.get_pos(n_node,sx,sy) 
             if nodes:get_state(n_node) == false  and raytrace5({x=x,y=y},{x=nx,y=ny}) then
                 --检查是不是两个都是边界点
-                
-                local key = nx .. "_" .. ny
-                local nkey = x .. "_" .. y
-                if not (edge_set[key] and edge_set[nkey]) then
+                if not (edge_set:exist(node) and edge_set:exist(n_node)) then
                     table.insert(queue,n_node)
-                    -- nodes[key] = true
                     nodes:set_state(n_node,true)
-                    Component[key] = true
-                    count = count + 1
-                end 
+                    Component:add_from_id(n_node)
+                end
             end
-     
         end
-    end
-    if count < 2 then
-        return nil
     end
     return Component
 end
@@ -456,33 +483,22 @@ function Chunk:to_nodes()
     return nodes
 end
 ---将区块切分成内部连通的点集
----@param edge_set table 边节点集
-function Chunk:get_nodes(edge_set)
+---@return NodeSet[] comps
+function Chunk:get_nodes()
     local comps = {}
 
     local sx,sy = self.cx * width,self.cy * height
     local nodes = self:to_nodes()
-    --只遍历内部点，边界点由内部点bfs获取
-    for y = sy + node_size,sy + height - node_size,node_size do
-        for x = sx + node_size,sx + width - node_size,node_size do
-            local id = NodeSet.get_id(x,y,sx,sy)
-            if nodes:get_state(id) == false then
-               local comp = bfs(nodes,edge_set,{x = x,y = y},sx,sy)
-               if comp ~= nil then
-                    table.insert(comps,comp)
-               end
+    local edge_set = nodes:get_edges_nodes()
+    local inner_set = nodes:get_inner_nodes()
+
+    for node_id in pairs(inner_set.nodes) do
+        if nodes:get_state(node_id) == false then
+            local comp = bfs(nodes,edge_set,node_id,sx,sy)
+            if comp.count > 1 then
+                table.insert(comps,comp)
             end
-        end
-    end
-    print("[DEBUG] get_nodes: chunk " .. self.cx .. "_" .. self.cy .. " -> " .. #comps .. " components, nodes total=" .. nodes.count)
-    -- 打印第一个 component 的前 5 个 key
-    if #comps > 0 then
-        local keys = {}
-        for k,_ in pairs(comps[1]) do
-            table.insert(keys, k)
-            if #keys >= 5 then break end
-        end
-        print("[DEBUG] comp[1] sample: " .. table.concat(keys, ", "))
+        end 
     end
     return comps
 end
@@ -632,13 +648,18 @@ local function floor_fill(chunk_key)
         chunk = Chunk:new(cx,cy)
         Chunk_data[chunk_key] = chunk
     end
+
+
+    local sx,sy = chunk.cx * width,chunk.cy * height
+
+
     local is_change = false
     local edge_set = chunk:get_edge_nodes()
     local comps = chunk:get_nodes(edge_set)
     --记录新连通点集的边指纹
     local comps_fps = {}
     for i, comp in ipairs(comps) do 
-        comps_fps[i] = chunk:nodes_get_edge_key(edge_set,comp)
+        comps_fps[i] = chunk:nodes_get_edge_key(edge_set,comp:to_nodes(sx,sy))
     end
     --获取旧连通块id列表
     local block_ids = chunk.blocks
@@ -683,7 +704,7 @@ local function floor_fill(chunk_key)
         end
         
         new_block_ids[i] = block_id
-        blocks_nodes[block_id] = v
+        blocks_nodes[block_id] = v:to_nodes(sx,sy)
     end
     chunk.blocks = new_block_ids
 
