@@ -28,7 +28,21 @@ local Chunk_data = {}
 ---@type table<number,Block>
 local Block_data = {}
 
-
+---取交集
+---@param set1 table
+---@param set2 table
+---@return table inter_set,number count
+local function get_inter_set(set1, set2)
+    local inter_set = {}
+    local count = 0 
+    for k, v in pairs(set1) do
+        if set2[k] ~= nil then --防止过滤值为false
+            inter_set[k] = v
+            count = count + 1
+        end
+    end
+    return inter_set,count
+end
 local function data_class()
     local _data = {}
     _data.__index = _data
@@ -124,7 +138,6 @@ function NodeSet:exist(id)
     return self.nodes[id] ~= nil
 end
 
-
 --曼巴顿距离
 ---@param id1 number
 ---@param id2 number
@@ -168,14 +181,12 @@ function NodeSet:to_nodes(sx, sy)
     end
     return out
 end
-
 local edge = {
     {dir = Directions.BOTTOM, offset = {1 , height_num - 1, width_num - 2, height_num -1 }}, 
     {dir = Directions.RIGHT, offset = {width_num - 1, 1, width_num - 1, height_num - 2}},
     {dir = Directions.TOP, offset = {1, 0, width_num - 2, 0}},
     {dir = Directions.LEFT, offset = {0, 1, 0, height_num - 2}},
 }
-
 ---@return NodeSet
 function NodeSet:get_edges_nodes()
     local out = NodeSet:new()
@@ -192,21 +203,71 @@ function NodeSet:get_edges_nodes()
     end
     return out
 end
----@return NodeSet
+
 function NodeSet:get_inner_nodes()
     local out = NodeSet:new()
-    for x = 1,width_num - 2 do
-        for y = 1,height_num - 2 do
+    for x = 1, width_num- 2 do
+        for y = 1, height_num - 2 do
             local id = x + y * width_num
             if self:exist(id) then
                 out:add_from_id(id)
             end
-        end 
+        end
     end
     return out
 end
-
-
+---@param nodes NodeSet
+---@return string key
+local function encode_edge_key(nodes)
+    local bytes = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}
+    local count = 0
+    for i,v in ipairs(edge) do 
+        local offset = v.offset
+        for x = offset[1], offset[3] do
+            for y = offset[2], offset[4] do
+                local id = x + y * width_num
+                local byte_idx = math.floor(count / 8) + 1  --1~16
+                local byte_bit = count % 8    -- 0~7
+                if nodes:exist(id) then
+                    bytes[byte_idx] = bytes[byte_idx] + 2^byte_bit
+                end
+                count = count + 1
+            end
+        end
+    end
+    if count == 0 then
+        return ""
+    end
+    return string.char(bytes[1],bytes[2],bytes[3],bytes[4],
+                       bytes[5],bytes[6],bytes[7],bytes[8],
+                       bytes[9],bytes[10],bytes[11],bytes[12],
+                       bytes[13],bytes[14],bytes[15],bytes[16])
+end
+---@param key string
+---@param dir? Direction 若不传则全部解码
+---@return NodeSet
+local function decode_edge_key(key,dir)
+    local edge_nodes = NodeSet:new()
+    local count = 0
+    for i,v in ipairs(edge) do 
+        local offset = v.offset
+        for x = offset[1], offset[3] do
+            for y = offset[2], offset[4] do
+                if dir == nil or dir == v.dir then
+                    local id = x + y * width_num
+                    local byte_idx = math.floor(count / 8) + 1  --1~16
+                    local byte_bit = count % 8    -- 0~7                
+                    local char = string.byte(key,byte_idx)
+                    if (math.floor(char / 2^byte_bit) % 2 == 1) then
+                        edge_nodes:add_from_id(id)
+                    end
+                end
+                count = count + 1
+            end
+        end
+    end
+    return edge_nodes
+end
     --#endregion
 
 
@@ -486,12 +547,10 @@ end
 ---@return NodeSet[] comps
 function Chunk:get_nodes()
     local comps = {}
-
     local sx,sy = self.cx * width,self.cy * height
     local nodes = self:to_nodes()
     local edge_set = nodes:get_edges_nodes()
     local inner_set = nodes:get_inner_nodes()
-
     for node_id in pairs(inner_set.nodes) do
         if nodes:get_state(node_id) == false then
             local comp = bfs(nodes,edge_set,node_id,sx,sy)
@@ -597,16 +656,13 @@ local function Create_new_blocks(block_fps,chunk_key)
             local nblocks = nchunk.blocks
             for _,nblock_id in ipairs(nblocks) do 
                 local nblock = Block_data[nblock_id]
-                local nedge_set = nblock:get_edge(-dir)
-                local edge_set = block:get_edge(dir)
-                --取交集
-                local count = 0 
-                
-                for node,_ in pairs(edge_set) do 
-                    if nedge_set[node] then
-                        count = count + 1
-                    end
-                end
+                -- local nedge_set = nblock:get_edge(-dir)
+                -- local edge_set = block:get_edge(dir)
+
+                local nedge_set =  decode_edge_key(nblock.hash_key,-dir)
+                local edge_set = decode_edge_key(block.hash_key,dir)
+
+                local inter_set,count = get_inter_set(nedge_set:to_nodes(cx * width,cy * height),edge_set:to_nodes(chunk.cx * width,chunk.cy * height))
                 if count > 0 then
                    --建立连接关系
                     block.neighbors[nblock.id] = true
@@ -618,20 +674,24 @@ local function Create_new_blocks(block_fps,chunk_key)
             end
             --当区块已存在时，不应该还残存旧块的占位
             block.neighbors[key] = nil
-        elseif next(block:get_edge(dir)) ~= nil then
-            --检查边界点是否可以进入该区块
-            local edge_set = block:get_edge(dir)
-            local count = 0
-            for node_key in pairs(edge_set) do 
-                if check_node(node_key) then
-                    count = count + 1
+        else    
+            local edge_set = decode_edge_key(block.hash_key,dir)
+            
+            if edge_set.count > 0 then 
+                    --检查边界点是否可以进入该区块
+                local count = 0
+
+                local nodes_set = edge_set:to_nodes(chunk.cx,chunk.cy)
+                for node_key in pairs(nodes_set) do 
+                    if check_node(node_key) then
+                        count = count + 1
+                    end
+                end
+                if count > 0 then
+                    --建立连接关系
+                    block.neighbors[key] = true
                 end
             end
-            if count > 0 then
-                --建立连接关系
-                block.neighbors[key] = true
-            end
-
         end
     end
     return block
@@ -655,11 +715,11 @@ local function floor_fill(chunk_key)
 
     local is_change = false
     local edge_set = chunk:get_edge_nodes()
-    local comps = chunk:get_nodes(edge_set)
+    local comps = chunk:get_nodes()
     --记录新连通点集的边指纹
     local comps_fps = {}
     for i, comp in ipairs(comps) do 
-        comps_fps[i] = chunk:nodes_get_edge_key(edge_set,comp:to_nodes(sx,sy))
+        comps_fps[i] = encode_edge_key(comp)
     end
     --获取旧连通块id列表
     local block_ids = chunk.blocks
@@ -784,24 +844,23 @@ local M = {
             local cx,cy = to_node:match("(-?%d+)_(-?%d+)")
             cx,cy = tonumber(cx),tonumber(cy)
             local dir = Direction:new(cx - chunk1.cx, cy - chunk1.cy)
-            edge_set = block1:get_edge(dir)
+            edge_set = decode_edge_key(block1.hash_key,dir):to_nodes(chunk1.cx * width,chunk1.cy * height)
         elseif  type(to_node) == "number" then
             --说明其是block
             local block2 = Block_data[to_node]
             local chunk2 = Chunk_data[block2.chunk_key]
             local dir = Direction:new(chunk2.cx - chunk1.cx, chunk2.cy - chunk1.cy)
-            local edge_set1 = block1:get_edge(dir)
-            local edge_set2 = block2:get_edge(-dir)   
-            for k,_ in pairs(edge_set1) do
-                --检查区块上存在，并且临近点存在
-                if edge_set2[k] and check_node then
-                    local x,y = k:match("(-?%d+)_(-?%d+)")
-                    x,y = tonumber(x),tonumber(y)
-                    x,y = x + dir.dx,y + dir.dy
-                    local key = x .. "_" .. y
-                    if check_node(key) then
-                        edge_set[k] = true
-                    end
+
+            local edge_set1 = decode_edge_key(block1.hash_key,dir):to_nodes(chunk1.cx * width,chunk1.cy * height)
+            local edge_set2 = decode_edge_key(block2.hash_key,-dir):to_nodes(chunk2.cx * width,chunk2.cy * height)
+            local inter_set = get_inter_set(edge_set1,edge_set2)
+            for k in pairs(inter_set) do
+                local x,y = k:match("(-?%d+)_(-?%d+)")
+                x,y = tonumber(x),tonumber(y)
+                x,y = x + dir.dx,y + dir.dy
+                local key = x .. "_" .. y
+                if check_node(key) then
+                    edge_set[k] = true
                 end
             end
         else

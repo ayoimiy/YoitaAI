@@ -201,10 +201,26 @@ function SmallFind:find(nodes,target_nodes,sx,sy)
 
     print("[SmallFind]Finding path...")
 
+    local _count = 0 
+    for k,v in pairs(nodes) do
+        _count = _count + 1
+    end
+    print("[SmallFind]Total nodes:",_count)
+    _count = 0
+    for k,v in pairs(target_nodes) do
+        if nodes[k] ~= nil then
+            _count = _count + 1
+        end
+       
+    end
+    print("[SmallFind]Total target nodes:",_count)
+    print("[SmallFind]Starting..." .. "start:".. sx .. ":" .. sy)
+
+
     local config = AStarConfig:new()
 
     config.start = {x=sx,y=sy}
-    config.max_count = 1000
+    config.max_count = 3000
     config.get_node_key = function(node)
         return node.x.."_"..node.y
     end
@@ -230,10 +246,7 @@ function SmallFind:find(nodes,target_nodes,sx,sy)
     end
     config.get_cost = function(from_node, to_node)
         local loss = 0
-        if (RaytracePlatforms(from_node.x,from_node.y,to_node.x,to_node.y)) then
-            return node_size/0.00001
-        end
-        --5射线检查
+        --5射线检查（与 BFS 的连通性判断一致）
         local point= {
             {-3, -8}, {3, -8}, {-3, 8}, {3, 8}
         }
@@ -257,7 +270,7 @@ function SmallFind:find(nodes,target_nodes,sx,sy)
 
         --计算两个节点
         local dx =  to_node.x - from_node.x 
-        local dy  = to_node.y -from_node.y
+        local dy  = to_node.y - from_node.y
         if dx == 0 or dy ==0 then 
             return node_size + loss
         else
@@ -266,17 +279,29 @@ function SmallFind:find(nodes,target_nodes,sx,sy)
     end
     config.is_goal = function(node)
         local key  = node.x .. "_" .. node.y
-        if target_nodes[key] then
+        if target_nodes[key] ~= nil  then
             return true
         end
         return false
     end
-
-    self.path = AStar(config) or {}
+    local path,nodes_set = AStar(config)
+    self.path = path or {}
     self.is_finding = true
     self.path_index = 1
 
-    print("[SmallFind]Path finding finished.")
+    -- local str = ""
+    -- for k,v in pairs(nodes_set or {}) do
+    --     str = str .. k  .. "  "
+    -- end
+    -- print("[SmallFind] all_node_find " .. str)
+    -- str = ""
+    -- for k,v in pairs(target_nodes) do
+    --     str = str .. k ..  "  "
+    -- end
+    -- print("[SmallFind] target_node_find " .. str)
+
+
+    print("[SmallFind]Path finding finished." .. "Path length:" .. #self.path)
 end
 ---@param from_node string|number
 ---@param to_node string|number
@@ -294,6 +319,40 @@ function SmallFind:move(player,from_node, to_node,is_change)
         local nodes = blocks_nodes[block_id]
 
         print("[SmallFind]Path finding started, received delegation info: " .. string.format("Nodes " .. from_node .. "--->" .. to_node))
+        -- debug
+        local tcount = 0
+        for _,_ in pairs(target_nodes) do tcount = tcount + 1 end
+        local ncount = 0
+        for _,_ in pairs(nodes) do ncount = ncount + 1 end
+        local start_key = sx .. "_" .. sy
+        print("[SmallFind] target_nodes=" .. tcount .. " nodes=" .. ncount .. " start_in_nodes=" .. tostring(nodes[start_key] ~= nil))
+        -- 检查前3个目标是否在 walkable 中
+        local i = 0
+        for k,_ in pairs(target_nodes) do
+            if i < 3 then
+                print("[SmallFind] target[" .. i .. "]=" .. k .. " in_nodes=" .. tostring(nodes[k] ~= nil))
+                i = i + 1
+            end
+        end
+        -- 检查 walkable 中是否有右边界的节点（x=256）
+        local edge_count = 0
+        for k,_ in pairs(nodes) do
+            local x = tonumber(k:match("(-?%d+)_"))
+            if x and x == 256 then edge_count = edge_count + 1 end
+        end
+        print("[SmallFind] nodes at x=256: " .. edge_count)
+        -- 检查从起点往右第一跳
+        local right_key = (sx + node_size) .. "_" .. sy
+        if nodes[right_key] then
+            local cost_test = 0
+            if RaytracePlatforms(sx, sy, sx + node_size, sy) then
+                print("[SmallFind] right_step=" .. right_key .. " RAYTRACE_BLOCKED")
+            else
+                print("[SmallFind] right_step=" .. right_key .. " clear")
+            end
+        else
+            print("[SmallFind] right_step=" .. right_key .. " NOT_IN_NODES")
+        end
 
         self:find(nodes,target_nodes,sx,sy)
 
