@@ -92,9 +92,24 @@ function OnWorldPreUpdate()
     GuiText(gui,100,200,"显示模式(按J键切换): ".. display_mode_name[display_mode] )
     GuiText(gui,100,220,string.format("Pos: %.2f, %.2f",x,y  ))
    
-    GuiText(gui,100,240,"Chunk: " .. debug.curr_chunk_key())
+
+    local chunk_key = debug.curr_chunk_key()
+    local small_path = debug.path_nodes()
+    local small_index = debug.index()
+    local big_path = debug.big_path()
+    local big_index = debug.big_index()
+
+    GuiText(gui,100,240,"Chunk: " .. chunk_key)
     GuiText(gui,100,260,"FindPath: " .. (FindPath.is_finding and "ON" or "OFF"))
-    GuiText(gui,100,280,"SmallPath: " .. (#debug.path_nodes() > 0 and (debug.index() .. "/" .. #debug.path_nodes()) or "none"))
+    GuiText(gui,100,280,"小寻路: " .. (#small_path > 0 and (small_index .. "/" .. #small_path) or "none"))
+    GuiText(gui,120,300, "当前节点；" .. (small_path[small_index] and string.format("%.2f, %.2f",small_path[small_index].x,small_path[small_index].y) or "none" ) )
+    GuiText(gui,220,300,"下一个节点；" .. (small_path[small_index+1] and string.format("%.2f, %.2f",small_path[small_index+1].x,small_path[small_index+1].y) or "none" ) )
+    GuiText(gui,320,300, "目标节点；" .. (small_path[#small_path] and string.format("%.2f, %.2f",small_path[#small_path].x,small_path[#small_path].y) or "none" ) )
+    GuiText(gui,100,320,"大寻路: " .. (#big_path > 0 and (big_index .. "/" .. #big_path) or "none" ))
+    GuiText(gui,120,340, "当前节点；" .. (( big_path[big_index] and big_path[big_index]) or "none" ))
+    GuiText(gui,220,340,"下一个节点；" .. (( big_path[big_index+1] and big_path[big_index+1]) or "none" ) )
+    GuiText(gui,320,340, "目标节点；" .. (( big_path[#big_path] and big_path[#big_path]) or "none" ) )
+
     -- GuiText(gui,100,300,"LittlePath: " .. (#FindPath.path_nodes() > 0 and (FindPath.get_index() .. "/" .. #FindPath.path_nodes()) or "none"))
 
 

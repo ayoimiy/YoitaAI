@@ -447,6 +447,12 @@ M.debug = {
     index = function ()
         return SmallFind.path_index
     end,
+    big_path = function ()
+        return BigFind.path
+    end,
+    big_index = function ()
+        return BigFind.path_index
+    end,
     curr_chunk_key = function ()
         return curr_chunk_key
     end

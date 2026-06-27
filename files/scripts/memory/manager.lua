@@ -707,8 +707,11 @@ function M.get_block_edge(from_node,to_node)
         for k,v in pairs(edge_set) do 
             local x,y = k:match("(-?%d+)_(-?%d+)")
             x,y = tonumber(x),tonumber(y)
-            local key = (x + dir.dx * node_size) .. "_" ..  (y + dir.dy * node_size)
-            target_set[key] = true
+            local nx,ny = x + dir.dx * node_size  ,y + dir.dy *node_size
+            local key = nx .. "_" .. ny
+            if check_node(key) and raytrace5({x = x, y = y},{x = nx, y = ny}) then
+                target_set[key] = true
+            end
         end
     elseif  type(to_node) == "number" then
         --说明其是block
@@ -722,9 +725,9 @@ function M.get_block_edge(from_node,to_node)
         for k in pairs(inter_set) do
             local x,y = k:match("(-?%d+)_(-?%d+)")
             x,y = tonumber(x),tonumber(y)
-            x,y = x + dir.dx * node_size  ,y + dir.dy *node_size
-            local key = x .. "_" .. y
-            if check_node(key) then
+            local nx,ny = x + dir.dx * node_size  ,y + dir.dy *node_size
+            local key = nx .. "_" .. ny
+            if check_node(key) and raytrace5({x = x,y =y},{x = nx,y = ny}) then
                 target_set[key] = true
             end
         end
