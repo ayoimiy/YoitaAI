@@ -1,0 +1,54 @@
+
+
+======= Log Start =======
+  Time: 22:54:36
+
+22:54:47 [INFO] [main] Grid Explorer started
+22:54:48 [INFO] [main] Command: set mode random
+22:54:48 [INFO] [main] Command: set intensity 1.5
+22:54:48 [INFO] [main] Command: set rays on
+22:54:57 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 22:56:44
+
+22:56:45 [INFO] [main] Grid Explorer started
+22:56:46 [INFO] [main] Command: set mode random
+22:56:46 [INFO] [main] Command: set intensity 1.5
+22:56:46 [INFO] [main] Command: set rays on
+22:57:20 [INFO] [main] Command: set mode random
+22:57:26 [INFO] [main] Command: set mode perlin
+22:57:33 [INFO] [main] Command: set mode random
+22:57:44 [INFO] [main] Command: set seed 5
+22:58:18 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 23:05:45
+
+23:05:46 [INFO] [main] Grid Explorer started
+23:05:46 [INFO] [main] Command: set fill 0.45
+23:05:46 [INFO] [main] Command: set iterations 5
+23:05:46 [INFO] [main] Command: set speed 5
+23:06:00 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 23:07:23
+
+23:07:23 [INFO] [main] Grid Explorer started
+23:07:24 [INFO] [main] Command: set fill 0.45
+23:07:24 [INFO] [main] Command: set iterations 5
+23:07:24 [INFO] [main] Command: set speed 5
+23:08:27 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 23:52:53
+
+23:52:54 [INFO] [main] Grid Explorer started
+23:52:54 [INFO] [main] Command: set fill 0.45
+23:52:54 [INFO] [main] Command: set iterations 5
+23:52:54 [INFO] [main] Command: set speed 5
+23:54:01 [INFO] [main] Grid Explorer shutting down

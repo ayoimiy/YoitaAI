@@ -1,0 +1,224 @@
+
+
+======= Log Start =======
+  Time: 00:03:17
+
+00:03:17 [INFO] [main] Grid Explorer started
+00:03:17 [INFO] [main] Command: set mode walk
+00:03:17 [INFO] [main] Command: set intensity 1.0
+00:03:17 [INFO] [main] Command: set interval 1.0
+00:04:32 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 00:04:40
+
+00:04:40 [INFO] [main] Grid Explorer started
+00:04:40 [INFO] [main] Command: set mode walk
+00:04:40 [INFO] [main] Command: set intensity 1.0
+00:04:40 [INFO] [main] Command: set interval 1.0
+00:05:33 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 00:06:20
+
+00:06:20 [INFO] [main] Grid Explorer started
+00:06:20 [INFO] [main] Command: set mode walk
+00:06:20 [INFO] [main] Command: set intensity 1.0
+00:06:20 [INFO] [main] Command: set interval 1.0
+00:10:49 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 00:37:19
+
+00:37:20 [INFO] [main] Grid Explorer started
+00:37:20 [INFO] [main] Command: set mode walk
+00:37:20 [INFO] [main] Command: set intensity 1.0
+00:37:20 [INFO] [main] Command: set interval 1.0
+00:40:27 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 00:40:35
+
+00:40:35 [INFO] [main] Grid Explorer started
+00:40:35 [INFO] [main] Command: set mode walk
+00:40:35 [INFO] [main] Command: set intensity 1.0
+00:40:35 [INFO] [main] Command: set interval 1.0
+00:47:29 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 01:12:22
+
+01:12:22 [INFO] [main] Grid Explorer started
+01:12:22 [INFO] [main] Command: set mode walk
+01:12:22 [INFO] [main] Command: set intensity 1.0
+01:12:22 [INFO] [main] Command: set interval 1.0
+01:15:05 [INFO] [main] Map saved: E:\works\softdev\YoitaAI\tools\maps\.map
+01:32:57 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 01:33:02
+
+01:33:03 [INFO] [main] Grid Explorer started
+01:33:03 [INFO] [main] Command: set mode walk
+01:33:03 [INFO] [main] Command: set intensity 1.0
+01:33:03 [INFO] [main] Command: set interval 1.0
+01:40:10 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 01:44:20
+
+01:44:21 [INFO] [main] Grid Explorer started
+01:44:21 [INFO] [main] Command: set mode walk
+01:44:21 [INFO] [main] Command: set intensity 1.0
+01:44:21 [INFO] [main] Command: set interval 0.1
+01:46:26 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 01:46:31
+
+01:46:32 [INFO] [main] Grid Explorer started
+01:46:32 [INFO] [main] Command: set mode walk
+01:46:32 [INFO] [main] Command: set intensity 1.0
+01:46:32 [INFO] [main] Command: set interval 0.1
+01:51:13 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 01:51:19
+
+01:51:19 [INFO] [main] Grid Explorer started
+01:51:19 [INFO] [main] Command: set mode walk
+01:51:19 [INFO] [main] Command: set intensity 1.0
+01:51:19 [INFO] [main] Command: set interval 0.03
+01:51:22 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 01:57:08
+
+01:57:08 [INFO] [main] Map loaded: E:\works\softdev\YoitaAI\tools\maps\default.map
+01:57:09 [INFO] [main] Grid Explorer started
+01:57:09 [INFO] [main] Command: set mode walk
+01:57:09 [INFO] [main] Command: set intensity 1.0
+01:57:09 [INFO] [main] Command: set interval 0.03
+02:03:04 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 02:03:13
+
+02:03:13 [INFO] [main] Map loaded: E:\works\softdev\YoitaAI\tools\maps\default.map
+02:03:13 [INFO] [main] Grid Explorer started
+02:03:13 [INFO] [main] Command: set mode walk
+02:03:13 [INFO] [main] Command: set intensity 1.0
+02:03:13 [INFO] [main] Command: set interval 0.03
+02:04:53 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 02:05:08
+
+02:05:08 [INFO] [main] Map loaded: E:\works\softdev\YoitaAI\tools\maps\default.map
+02:05:09 [INFO] [main] Grid Explorer started
+02:05:09 [INFO] [main] Command: set mode walk
+02:05:09 [INFO] [main] Command: set intensity 1.0
+02:05:09 [INFO] [main] Command: set interval 0.03
+02:06:31 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 02:08:59
+
+02:08:59 [INFO] [main] Map loaded: E:\works\softdev\YoitaAI\tools\maps\default.map
+02:08:59 [INFO] [main] Grid Explorer started
+02:08:59 [INFO] [main] Command: set mode walk
+02:08:59 [INFO] [main] Command: set intensity 1.0
+02:08:59 [INFO] [main] Command: set interval 0.03
+02:12:08 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 02:12:44
+
+02:12:44 [INFO] [main] Map loaded: E:\works\softdev\YoitaAI\tools\maps\default.map
+02:12:45 [INFO] [main] Grid Explorer started
+02:12:45 [INFO] [main] Command: set mode walk
+02:12:45 [INFO] [main] Command: set intensity 1.0
+02:12:45 [INFO] [main] Command: set interval 0.03
+02:16:08 [INFO] [main] Map saved: E:\works\softdev\YoitaAI\tools\maps\default.map
+02:16:08 [INFO] [main] Map saved: E:\works\softdev\YoitaAI\tools\maps\default.map
+02:16:09 [INFO] [main] Map saved: E:\works\softdev\YoitaAI\tools\maps\default.map
+02:16:09 [INFO] [main] Map saved: E:\works\softdev\YoitaAI\tools\maps\default.map
+02:18:45 [INFO] [main] Map saved: E:\works\softdev\YoitaAI\tools\maps\default.map
+02:19:59 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 02:20:04
+
+02:20:04 [INFO] [main] Map loaded: E:\works\softdev\YoitaAI\tools\maps\default.map
+02:20:05 [INFO] [main] Grid Explorer started
+02:20:05 [INFO] [main] Command: set mode walk
+02:20:05 [INFO] [main] Command: set intensity 1.0
+02:20:05 [INFO] [main] Command: set interval 0.001
+02:30:16 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 02:32:57
+
+02:32:57 [INFO] [main] Map loaded: E:\works\softdev\YoitaAI\tools\maps\1.map
+02:32:58 [INFO] [main] Grid Explorer started
+02:32:58 [INFO] [main] Command: set mode walk
+02:32:58 [INFO] [main] Command: set intensity 1.0
+02:32:58 [INFO] [main] Command: set interval 0.001
+02:33:10 [WARN] [main] Map not found: E:\works\softdev\YoitaAI\tools\maps\2.map
+02:33:15 [INFO] [main] Map loaded: E:\works\softdev\YoitaAI\tools\maps\3.map
+02:33:18 [WARN] [main] Map not found: E:\works\softdev\YoitaAI\tools\maps\4.map
+02:33:20 [WARN] [main] Map not found: E:\works\softdev\YoitaAI\tools\maps\5.map
+02:33:20 [WARN] [main] Map not found: E:\works\softdev\YoitaAI\tools\maps\6.map
+02:33:20 [WARN] [main] Map not found: E:\works\softdev\YoitaAI\tools\maps\7.map
+02:33:21 [WARN] [main] Map not found: E:\works\softdev\YoitaAI\tools\maps\8.map
+02:33:21 [WARN] [main] Map not found: E:\works\softdev\YoitaAI\tools\maps\9.map
+02:33:21 [INFO] [main] Map loaded: E:\works\softdev\YoitaAI\tools\maps\1.map
+02:33:22 [WARN] [main] Map not found: E:\works\softdev\YoitaAI\tools\maps\2.map
+02:33:22 [INFO] [main] Map loaded: E:\works\softdev\YoitaAI\tools\maps\3.map
+02:33:23 [WARN] [main] Map not found: E:\works\softdev\YoitaAI\tools\maps\4.map
+02:33:23 [WARN] [main] Map not found: E:\works\softdev\YoitaAI\tools\maps\5.map
+02:33:23 [WARN] [main] Map not found: E:\works\softdev\YoitaAI\tools\maps\6.map
+02:33:23 [WARN] [main] Map not found: E:\works\softdev\YoitaAI\tools\maps\7.map
+02:33:23 [WARN] [main] Map not found: E:\works\softdev\YoitaAI\tools\maps\8.map
+02:33:24 [WARN] [main] Map not found: E:\works\softdev\YoitaAI\tools\maps\9.map
+02:33:24 [INFO] [main] Map loaded: E:\works\softdev\YoitaAI\tools\maps\1.map
+02:34:20 [INFO] [main] Map saved: E:\works\softdev\YoitaAI\tools\maps\1.map
+02:35:35 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 02:40:25
+
+02:40:25 [INFO] [main] Map loaded: E:\works\softdev\YoitaAI\tools\maps\1.map
+02:40:26 [INFO] [main] Grid Explorer started
+02:40:26 [INFO] [main] Command: set mode walk
+02:40:26 [INFO] [main] Command: set intensity 1.0
+02:40:26 [INFO] [main] Command: set interval 0.001
+02:46:23 [INFO] [main] Grid Explorer shutting down
+
+
+======= Log Start =======
+  Time: 02:46:29
+
+02:46:29 [INFO] [main] Map loaded: E:\works\softdev\YoitaAI\tools\maps\1.map
+02:46:29 [INFO] [main] Grid Explorer started
+02:46:29 [INFO] [main] Command: set mode walk
+02:46:29 [INFO] [main] Command: set intensity 1.0
+02:46:29 [INFO] [main] Command: set interval 0.001
+02:47:08 [INFO] [main] Grid Explorer shutting down
