@@ -11,18 +11,23 @@ local node_size = 8
 local max_dist = 75
 
 local curr_chunk_key = nil
+local curr_block_id = nil
 ---@type table<number,NodeSet>
 local blocks_nodes = {}
 
 local Is_change = false
 local re_ff = false
 local change_cool_down = 0
+local stay_time = 0
+local leave_time = 0
+
 
 local function re_flood_fill()
     if change_cool_down > 0 then
         return
     else
         change_cool_down = 10
+        Is_change = true
         re_ff = true
     end
 end
@@ -211,14 +216,42 @@ function BigFind:move(player,find)
 
     --检查一下玩家是否在位于一个连通块中
     local start_id,nx,ny = find_near_block(x,y)
+
+
+    
+    if self.path[self.path_index] ~= start_id then
+        stay_time = stay_time + 1 
+        leave_time = 0 
+        if stay_time > 100 then
+            --尝试刷新区块，这个可以看做不小心偏离，所以只需要重新刷即可
+            re_flood_fill()
+            stay_time = 0
+        end
+    else
+        leave_time = leave_time + 1
+        stay_time = 0
+        if leave_time > 300 then
+            --卡注了，需要其他寻路
+            
+
+
+            leave_time = 0
+        end
+    end
+
     --向最近的分量寻路
     if start_id == nil then
         --委托给其他寻路，以便回到分量中
-        
+
+
         --尝试刷新区块
         re_flood_fill()
         return
     end
+    curr_block_id = start_id
+
+  
+
     --常规寻路
     if find or self.is_finding == false  then
         self:find(start_id)
@@ -241,6 +274,28 @@ function BigFind:move(player,find)
     end
     return false
 end
+
+
+local function Raytrace5check(from_node,to_node)
+    local loss = 0
+    --5射线检查（与 BFS 的连通性判断一致）
+    local point= {
+        {-3, -8}, {3, -8}, {-3, 8}, {3, 8}
+    }
+    local count = 0 
+    for _,v in ipairs(point) do
+        local bx = RaytracePlatforms(from_node.x + v[1], from_node.y + v[2], to_node.x + v[1], to_node.y + v[2])
+        if bx then
+            count = count + 1
+        end
+    end
+    return count
+end 
+
+
+
+
+
 ---@param nodes table<string,boolean>
 ---@param target_nodes table<string,boolean>
 ---@param sx number
@@ -270,7 +325,10 @@ function SmallFind:find(nodes,target_nodes,sx,sy)
                     local y = node.y + dy * node_size
                     local key = x .. "_" .. y
                     if nodes[key] ~= nil or target_nodes[key] ~= nil then
-                        table.insert(neighbors,{x = x, y = y })
+                        local count = Raytrace5check(node,{x=x,y=y})
+                        if count < 3 then
+                            table.insert(neighbors,{x = x, y = y })
+                        end
                     end
                 end
             end
@@ -279,17 +337,7 @@ function SmallFind:find(nodes,target_nodes,sx,sy)
     end
     config.get_cost = function(from_node, to_node)
         local loss = 0
-        --5射线检查（与 BFS 的连通性判断一致）
-        local point= {
-            {-3, -8}, {3, -8}, {-3, 8}, {3, 8}
-        }
-        local count = 0 
-        for _,v in ipairs(point) do
-            local bx = RaytracePlatforms(from_node.x + v[1], from_node.y + v[2], to_node.x + v[1], to_node.y + v[2])
-            if bx then
-                count = count + 1
-            end
-        end
+        local count = Raytrace5check(from_node,to_node)
         --0条射线完美，1条命中可接受，2条命中难以接受，3以上无法接受
         if count == 0 then
             loss = 0 
@@ -392,7 +440,9 @@ function M.update(player)
         print("curr_chunk_key changed,start floor fill,now chunk:" .. cc_key .. "\n")
     end
     if re_ff then
-        set,Is_change = ME.Floor_fill(cc_key)
+        local change = false
+        set,change = ME.Floor_fill(cc_key)
+        Is_change = Is_change or change
         blocks_nodes = set
         local count = 0
         for k,v in pairs(set) do
@@ -455,6 +505,9 @@ M.debug = {
     end,
     curr_chunk_key = function ()
         return curr_chunk_key
+    end,
+    curr_block_id = function ()
+        return curr_block_id
     end
 }
 
