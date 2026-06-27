@@ -15,6 +15,20 @@ local curr_chunk_key = nil
 local blocks_nodes = {}
 
 local Is_change = false
+local re_ff = false
+local change_cool_down = 0
+
+local function re_flood_fill()
+    if change_cool_down > 0 then
+        return
+    else
+        change_cool_down = 10
+        re_ff = true
+    end
+end
+
+
+
 --#endregion
 
 --#region 局部函数
@@ -45,6 +59,11 @@ local move = function (player,target)
         local in_water = RaytraceSurfacesAndLiquiform(x, y, x, y)
         controls.mButtonDownDown = in_water and not RaytraceSurfaces(x, y, x, y)
     end
+    local dist =   (x-target.x)^2 + (y-4-target.y)^2
+    if dist < max_dist then
+        return true
+    end
+    return false
 end
 ---停止所有移动按键——无路径时原地待命
 ---@param player Player 玩家实体
@@ -86,15 +105,15 @@ local function find_near_block(x,y)
 
     print("[DEBUG] find_near_block: key=" .. key .. " not found in " .. table_length(blocks_nodes) .. " blocks")
     --打印
-    for block_id,nodes in pairs(blocks_nodes) do
-        local nodes_set = nodes:to_nodes2(curr_chunk_key)
-        print("block" .. block_id .. " nodes:")
-        local str = ""
-        for k in pairs(nodes_set) do
-            str = str .. k .. "  "
-        end
-        print(str)
-    end
+    -- for block_id,nodes in pairs(blocks_nodes) do
+    --     local nodes_set = nodes:to_nodes2(curr_chunk_key)
+    --     print("block" .. block_id .. " nodes:")
+    --     local str = ""
+    --     for k in pairs(nodes_set) do
+    --         str = str .. k .. "  "
+    --     end
+    --     print(str)
+    -- end
 
 end
 
@@ -140,11 +159,12 @@ local SmallFind = FindPath:new()
 --[[
     实现大寻路
 ]]
----@param 
-function BigFind:find(sx,sy)
+---@param start_id number 起点block_id
+function BigFind:find(start_id)
+    print("\n")
     print("BigFind start")
     local config = AStarConfig:new()
-    config.start = find_near_block(sx,sy)
+    config.start = start_id
     print("now block_id is " .. tostring(config.start or "nil"))
     if config.start == nil then
         print("[BigFind] start error")
@@ -183,7 +203,7 @@ function BigFind:find(sx,sy)
     self.is_finding = true
     self.path_index = 1
     print("BigFind finished,find path size:" .. #self.path )
-
+    print("\n")
 end
 function BigFind:move(player,find)
     local x,y = player:get_pos()
@@ -191,10 +211,17 @@ function BigFind:move(player,find)
 
     --检查一下玩家是否在位于一个连通块中
     local start_id,nx,ny = find_near_block(x,y)
-
-
-    if find or self.is_finding == false then
-        self:find(x,y)
+    --向最近的分量寻路
+    if start_id == nil then
+        --委托给其他寻路，以便回到分量中
+        
+        --尝试刷新区块
+        re_flood_fill()
+        return
+    end
+    --常规寻路
+    if find or self.is_finding == false  then
+        self:find(start_id)
         is_change = true
     end
     if #self.path > 1 then
@@ -207,7 +234,7 @@ function BigFind:move(player,find)
         local next_node = self.path[self.path_index+1]
 
         --委托给小Find
-        if SmallFind:move(player,curr_node,next_node,is_change) then
+        if SmallFind:move(player,curr_node,next_node,is_change,start_id,nx,ny) then
             self.path_index = self.path_index + 1
             return false
         end
@@ -219,6 +246,7 @@ end
 ---@param sx number
 ---@param sy number
 function SmallFind:find(nodes,target_nodes,sx,sy)
+    print("\n")
     print("SmallFind start")
     print("useful nodes: " .. table_length(nodes))
     print("target nodes: " .. table_length(target_nodes))
@@ -241,7 +269,7 @@ function SmallFind:find(nodes,target_nodes,sx,sy)
                     local x = node.x + dx * node_size
                     local y = node.y + dy * node_size
                     local key = x .. "_" .. y
-                    if nodes[key] ~= nil then
+                    if nodes[key] ~= nil or target_nodes[key] ~= nil then
                         table.insert(neighbors,{x = x, y = y })
                     end
                 end
@@ -294,16 +322,18 @@ function SmallFind:find(nodes,target_nodes,sx,sy)
     self.is_finding = true
     self.path_index = 1
     print("SmallFind finished,find path size:" .. #self.path)
+    print("\n")
 end
 ---@param from_node string|number
 ---@param to_node string|number
 ---@param is_change boolean
-function SmallFind:move(player,from_node, to_node,is_change)
-    local x,y = player:get_pos()
+---@param block_id number
+---@param sx number
+---@param sy number
+function SmallFind:move(player,from_node, to_node,is_change,block_id,sx,sy)
+   
     if self.is_finding == false or is_change == true then
         local target_nodes =  ME.get_block_edge(from_node, to_node)
-        
-        local block_id,sx,sy = find_near_block(x,y)
         if not (block_id and sx and sy) then
             error("[SmallFind]block_id error")
             return
@@ -324,14 +354,14 @@ function SmallFind:move(player,from_node, to_node,is_change)
             self:refresh()
             return true
         end
-        --委托给底层移动
+        --委托给底层移动,到达目标点的判断也一并委托了
         local target = self.path[self.path_index]
-        move(player,target)
-        
-        local dist =   (x-target.x)^2 + (y-4-target.y)^2
-        if dist < max_dist then
+        if move(player,target) then 
             self.path_index = self.path_index + 1
         end
+    else
+        --无寻路，但需要移动状态
+        Move_no_path(player)
     end
     return false
 end
@@ -354,12 +384,15 @@ function M.update(player)
     local cc_key = ME.get_chunk_key(x,y)
     local set = {}
 
+
+    change_cool_down = change_cool_down - 1
     if cc_key ~= curr_chunk_key then
-
-        print("curr_chunk_key changed,start floor fill,now chunk:" .. cc_key)
-
-        set,Is_change = ME.Floor_fill(cc_key)
+        re_ff = true
         curr_chunk_key = cc_key
+        print("curr_chunk_key changed,start floor fill,now chunk:" .. cc_key .. "\n")
+    end
+    if re_ff then
+        set,Is_change = ME.Floor_fill(cc_key)
         blocks_nodes = set
         local count = 0
         for k,v in pairs(set) do
@@ -370,6 +403,7 @@ function M.update(player)
         for k,v in pairs(set) do
             print("block" .. k .. " nodes count:" .. v.count )
         end
+        re_ff = false
     end
     if M.is_finding then
         BigFind:move(player,Is_change)
@@ -405,6 +439,9 @@ M.debug = {
     all_nodes = function (x,y)
         local block_id = find_near_block(x,y)
         local nodes = blocks_nodes[block_id]
+        if not nodes then
+            return {}
+        end
         return nodes_to_nodes(nodes:to_nodes2(curr_chunk_key))
     end,
     index = function ()

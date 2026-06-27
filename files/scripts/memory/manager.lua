@@ -633,12 +633,12 @@ end
 
 ---@class Manager
 ---@field node_size number 节点步长(8px)，对齐Chunk.node_size
----@field Floor_fill fun(chunk_key:string):table,boolean 扫描并更新区块连通分量
+---@field Floor_fill fun(chunk_key:string):table<number,NodeSet> ,boolean 扫描并更新区块连通分量
 ---@field get_chunk_key fun(x:number,y:number):string 世界坐标转区块key
 ---@field get_block_chunk_key fun(block_id:number):string block id → 所属区块key
 ---@field get_block_distant fun(chunk_key1:string,chunk_key2:string):number 两区块间的曼哈顿距离(单位:chunk)
 ---@field get_block_neighbors fun(block_id:number):table<number, number|string> 返回邻居列表(number=block id, string=未知chunk)
----@field get_block_edge fun(from_node:string|number,to_node:string|number):table<string,boolean> 两block共享边上的节点交集
+---@method get_block_edge 
 local M = {
     node_size = node_size,
     Floor_fill = floor_fill,
@@ -682,48 +682,56 @@ local M = {
         end
         return neighbors
     end,
-    ---获取两个连通块在共享边上的交点(即两个block实际相邻的节点)
-    ---用于确定跨block移动时的"门"位置
-    ---@param from_node number|string 连通块1 id
-    ---@param to_node number|string 连通块2 id
-    ---@return table<string, boolean> edge_set 共享边节点集，key="x_y"
-    get_block_edge = function (from_node,to_node)
-        if type(from_node) ~= "number" then
-            print("[get_block_edge] from_node type error:" .. tostring(from_node))
-            return {}
-        end
-        local block1 = Block_data[from_node]
-        
-        local chunk1 = Chunk_data[block1.chunk_key]
-        local edge_set = {}
-        if type(to_node) == "string" then
-            --说明其是区块
-            local cx,cy = to_node:match("(-?%d+)_(-?%d+)")
-            cx,cy = tonumber(cx),tonumber(cy)
-            local dir = Direction:new(cx - chunk1.cx, cy - chunk1.cy)
-            edge_set = decode_edge_key(block1.hash_key,dir):to_nodes(chunk1.cx * width,chunk1.cy * height)
-        elseif  type(to_node) == "number" then
-            --说明其是block
-            local block2 = Block_data[to_node]
-            local chunk2 = Chunk_data[block2.chunk_key]
-            local dir = Direction:new(chunk2.cx - chunk1.cx, chunk2.cy - chunk1.cy)
-
-            local edge_set1 = decode_edge_key(block1.hash_key,dir):to_nodes(chunk1.cx * width,chunk1.cy * height)
-            local edge_set2 = decode_edge_key(block2.hash_key,-dir):to_nodes(chunk2.cx * width,chunk2.cy * height)
-            local inter_set = get_inter_set(edge_set1,edge_set2)
-            for k in pairs(inter_set) do
-                local x,y = k:match("(-?%d+)_(-?%d+)")
-                x,y = tonumber(x),tonumber(y)
-                x,y = x + dir.dx,y + dir.dy
-                local key = x .. "_" .. y
-                if check_node(key) then
-                    edge_set[k] = true
-                end
-            end
-        else
-            print("[get_block_edge] to_node type error")
-        end
-        return edge_set
-    end
 }
+
+---获取两个连通块在共享边上的交点(即两个block实际相邻的节点)
+---用于确定跨block移动时的"门"位置
+---@param from_node number|string 连通块1 id
+---@param to_node number|string 连通块2 id
+---@return table<string, boolean> target_set
+function M.get_block_edge(from_node,to_node)
+    if type(from_node) ~= "number" then
+        print("[get_block_edge] from_node type error:" .. tostring(from_node))
+        return {}
+    end
+    local block1 = Block_data[from_node]
+    
+    local chunk1 = Chunk_data[block1.chunk_key]
+    local target_set = {}
+    if type(to_node) == "string" then
+        --说明其是区块
+        local cx,cy = to_node:match("(-?%d+)_(-?%d+)")
+        cx,cy = tonumber(cx),tonumber(cy)
+        local dir = Direction:new(cx - chunk1.cx, cy - chunk1.cy)
+        local edge_set = decode_edge_key(block1.hash_key,dir):to_nodes(chunk1.cx * width,chunk1.cy * height)
+        for k,v in pairs(edge_set) do 
+            local x,y = k:match("(-?%d+)_(-?%d+)")
+            x,y = tonumber(x),tonumber(y)
+            local key = (x + dir.dx * node_size) .. "_" ..  (y + dir.dy * node_size)
+            target_set[key] = true
+        end
+    elseif  type(to_node) == "number" then
+        --说明其是block
+        local block2 = Block_data[to_node]
+        local chunk2 = Chunk_data[block2.chunk_key]
+        local dir = Direction:new(chunk2.cx - chunk1.cx, chunk2.cy - chunk1.cy)
+
+        local edge_set1 = decode_edge_key(block1.hash_key,dir):to_nodes(chunk1.cx * width,chunk1.cy * height)
+        local edge_set2 = decode_edge_key(block2.hash_key,-dir):to_nodes(chunk2.cx * width,chunk2.cy * height)
+        local inter_set = get_inter_set(edge_set1,edge_set2)
+        for k in pairs(inter_set) do
+            local x,y = k:match("(-?%d+)_(-?%d+)")
+            x,y = tonumber(x),tonumber(y)
+            x,y = x + dir.dx * node_size  ,y + dir.dy *node_size
+            local key = x .. "_" .. y
+            if check_node(key) then
+                target_set[key] = true
+            end
+        end
+    else
+        print("[get_block_edge] to_node type error")
+    end
+    return target_set
+end
+
 return M
