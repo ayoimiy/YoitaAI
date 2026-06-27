@@ -107,7 +107,7 @@ function OnWorldPreUpdate()
     elseif display_mode == 1 then
         Display_pos_table(debug.target_nodes())
     else 
-        Display_pos_table(debug.all_nodes())
+        Display_pos_table(debug.all_nodes(x,y))
     end
     if true then return end
 end

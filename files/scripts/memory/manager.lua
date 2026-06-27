@@ -115,6 +115,12 @@ function NodeSet.get_pos(id,sx,sy)
     local iy = math.floor(id / width_num)
     return ix * node_size + sx, iy * node_size + sy
 end
+function NodeSet.get_pos2(id,chunk_id)
+    local chunk = Chunk_data[chunk_id]
+    local sx,sy = chunk.cx * width,chunk.cy * height
+    return NodeSet.get_pos(id,sx,sy)
+end
+
 function NodeSet.get_id(x,y,sx,sy)
     local ix = math.floor((x - sx) / node_size)
     local iy = math.floor((y - sy) / node_size)
@@ -139,12 +145,12 @@ function NodeSet:exist(id)
 end
 ---@param x number
 ---@param y number
----@return boolean
+---@return boolean,number id 
 function NodeSet:exist2(x,y,chunk_id)
     local chunk = Chunk_data[chunk_id]
     local sx,sy = chunk.cx * width, chunk.cy * height
     local id = NodeSet.get_id(x,y,sx,sy)
-    return self.nodes[id] ~= nil
+    return self.nodes[id] ~= nil,id
 end
 
 
@@ -650,7 +656,7 @@ local M = {
         if Block_data[block_id] then
             return Block_data[block_id].chunk_key
         end
-        print("block_id not found")
+        print("not found,block_id:" .. tostring(block_id))
         return "0_0"
     end,
     ---计算两个区块间的曼哈顿距离(单位:chunk)

@@ -69,15 +69,33 @@ local function find_near_block(x,y)
     local nx = math.floor(x/node_size) * node_size
     local ny = math.floor(y/node_size) * node_size
     local key = nx .. "_" .. ny
+
     for block_id,nodes in pairs(blocks_nodes) do
-        if nodes:exist2(x,y,curr_chunk_key) then
+        local exist,id = nodes:exist2(x,y,curr_chunk_key)
+        if exist then
             return block_id,nx,ny
+        else
+            local nnodes = nodes:get_neighbors(id)
+            for i,v in ipairs(nnodes) do 
+                if nodes:exist(v) then
+                    return block_id,nodes.get_pos2(v,curr_chunk_key)
+                end
+            end
         end
     end
-    --如果找不到block_id,说明玩家偏离，尝试重寻路
-    Is_change = true
 
     print("[DEBUG] find_near_block: key=" .. key .. " not found in " .. table_length(blocks_nodes) .. " blocks")
+    --打印
+    for block_id,nodes in pairs(blocks_nodes) do
+        local nodes_set = nodes:to_nodes2(curr_chunk_key)
+        print("block" .. block_id .. " nodes:")
+        local str = ""
+        for k in pairs(nodes_set) do
+            str = str .. k .. "  "
+        end
+        print(str)
+    end
+
 end
 
 --#endregion
@@ -114,7 +132,6 @@ end
 local debug_target_nodes = {}
 local debug_all_nodes = {}
 
-
 --#region 大小寻路实现
 
 local BigFind = FindPath:new()
@@ -123,10 +140,12 @@ local SmallFind = FindPath:new()
 --[[
     实现大寻路
 ]]
+---@param 
 function BigFind:find(sx,sy)
-    print("[BigFind]Start finding path... " .. string.format("Player matched coordinates: %.0f,%.0f",sx,sy))
+    print("BigFind start")
     local config = AStarConfig:new()
     config.start = find_near_block(sx,sy)
+    print("now block_id is " .. tostring(config.start or "nil"))
     if config.start == nil then
         print("[BigFind] start error")
         return
@@ -160,16 +179,20 @@ function BigFind:find(sx,sy)
         end
         return false
     end
-    print("[BigFind]Config setup successful " .. string.format("Player's connected block %.0f",config.start))
     self.path = AStar(config) or {}
     self.is_finding = true
     self.path_index = 1
+    print("BigFind finished,find path size:" .. #self.path )
 
-    print("[BigFind]Path finding finished.")
 end
 function BigFind:move(player,find)
     local x,y = player:get_pos()
     local is_change = false
+
+    --检查一下玩家是否在位于一个连通块中
+    local start_id,nx,ny = find_near_block(x,y)
+
+
     if find or self.is_finding == false then
         self:find(x,y)
         is_change = true
@@ -182,7 +205,6 @@ function BigFind:move(player,find)
         end
         local curr_node = self.path[self.path_index]
         local next_node = self.path[self.path_index+1]
-
 
         --委托给小Find
         if SmallFind:move(player,curr_node,next_node,is_change) then
@@ -197,6 +219,10 @@ end
 ---@param sx number
 ---@param sy number
 function SmallFind:find(nodes,target_nodes,sx,sy)
+    print("SmallFind start")
+    print("useful nodes: " .. table_length(nodes))
+    print("target nodes: " .. table_length(target_nodes))
+    print("start pos: " .. sx .. "," .. sy)
     local config = AStarConfig:new()
     config.start = {x=sx,y=sy}
     config.max_count = 1000
@@ -267,7 +293,7 @@ function SmallFind:find(nodes,target_nodes,sx,sy)
     self.path = path or {}
     self.is_finding = true
     self.path_index = 1
-    print("[SmallFind]Path finding finished." .. "Path length:" .. #self.path)
+    print("SmallFind finished,find path size:" .. #self.path)
 end
 ---@param from_node string|number
 ---@param to_node string|number
@@ -328,8 +354,10 @@ function M.update(player)
     local cc_key = ME.get_chunk_key(x,y)
     local set = {}
 
-  
     if cc_key ~= curr_chunk_key then
+
+        print("curr_chunk_key changed,start floor fill,now chunk:" .. cc_key)
+
         set,Is_change = ME.Floor_fill(cc_key)
         curr_chunk_key = cc_key
         blocks_nodes = set
@@ -337,7 +365,11 @@ function M.update(player)
         for k,v in pairs(set) do
             count = count + 1
         end
-        print("[DEBUG] Floor_fill returned " .. count  .. " blocks for chunk " .. cc_key .. " (player at " .. math.floor(x) .. "," .. math.floor(y) .. ")")
+        print("floor fill finished:")
+        print("blocks count:" .. count)
+        for k,v in pairs(set) do
+            print("block" .. k .. " nodes count:" .. v.count )
+        end
     end
     if M.is_finding then
         BigFind:move(player,Is_change)
@@ -370,8 +402,10 @@ M.debug = {
     target_nodes = function ()
         return nodes_to_nodes(debug_target_nodes)
     end,
-    all_nodes = function ()
-        return nodes_to_nodes(debug_all_nodes)
+    all_nodes = function (x,y)
+        local block_id = find_near_block(x,y)
+        local nodes = blocks_nodes[block_id]
+        return nodes_to_nodes(nodes:to_nodes2(curr_chunk_key))
     end,
     index = function ()
         return SmallFind.path_index
