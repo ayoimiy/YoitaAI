@@ -13,6 +13,7 @@ import math
 from collections import deque
 from .heap import MinHeap
 from .spatial import raytrace5
+from .jps import pathfind_jps
 from config import RAYTRACE_BLOCK_THRESHOLD
 
 # ═══════════════════════════════════════════════════════════════
@@ -252,136 +253,8 @@ def pathfind_greedy(world, start, goal):
 
 # ═══════════════════════════════════════════════════════════════
 #  Algorithm 5: Jump Point Search (JPS)
+#  (defined in algo/jps.py — imported above)
 # ═══════════════════════════════════════════════════════════════
-
-def pathfind_jps(world, start, goal):
-    """
-    Jump Point Search — prunes symmetric paths on uniform-cost grid.
-    Only expands "jump points" — nodes where the optimal path changes
-    direction.  10-30x fewer expansions than A* on open terrain.
-
-    Uses diagonal-first pruning: jump in all 8 directions from each
-    node, only stop at obstacles, forced neighbors, or the goal.
-    """
-    open_set = MinHeap()
-    closed_set = set()
-    g_score = {start: 0.0}
-    parent = {}
-
-    open_set.push(_octile_heuristic(start, goal), start)
-
-    while not open_set.is_empty():
-        curr = open_set.pop()
-        if curr is None:
-            break
-        if curr in closed_set:
-            continue
-        if curr == goal:
-            return _reconstruct(parent, curr)
-
-        closed_set.add(curr)
-
-        # Identify successors via jumping in all 8 directions
-        successors = _jps_successors(world, curr, goal, closed_set)
-
-        for nb in successors:
-            if nb in closed_set:
-                continue
-            dx = abs(nb[0] - curr[0])
-            dy = abs(nb[1] - curr[1])
-            step_cost = 1.414 if dx + dy == 2 else 1.0
-
-            # Compute actual cost along the jumped path via octile distance
-            g_new = g_score[curr] + _octile_heuristic(curr, nb)
-
-            if nb not in g_score or g_new < g_score[nb]:
-                parent[nb] = curr
-                g_score[nb] = g_new
-                f = g_new + _octile_heuristic(nb, goal)
-                open_set.push(f, nb)
-
-    return None
-
-
-def _jps_successors(world, node, goal, closed_set):
-    """Find all jump-point successors from `node` in 8 directions."""
-    result = []
-    x, y = node
-    for dx in (-1, 0, 1):
-        for dy in (-1, 0, 1):
-            if dx == 0 and dy == 0:
-                continue
-            jp = _jump(world, x, y, dx, dy, goal)
-            if jp is not None and jp not in closed_set:
-                result.append(jp)
-    return result
-
-
-def _jump(world, cx, cy, dx, dy, goal):
-    """
-    Jump from (cx,cy) in direction (dx,dy).
-    Returns furthest walkable jump point, or None if blocked.
-    """
-    x, y = cx, cy
-    while True:
-        x += dx
-        y += dy
-        if not world.is_walkable(x, y):
-            return None  # hit wall
-        # Corner-cutting prevention (same as _n8 check)
-        if dx != 0 and dy != 0:
-            if not world.is_walkable(x - dx, y) and not world.is_walkable(x, y - dy):
-                return None
-        if (x, y) == goal:
-            return (x, y)
-
-        if dx != 0 and dy != 0:
-            # Diagonal: check if straight components are blocked -> forced neighbor
-            blocked_h = not world.is_walkable(x - dx, y)
-            open_h = world.is_walkable(x + dx, y)
-            blocked_v = not world.is_walkable(x, y - dy)
-            open_v = world.is_walkable(x, y + dy)
-            if (blocked_h and open_h) or (blocked_v and open_v):
-                return (x, y)
-            # Also check if straight jumps from here would find anything
-            if _jump_straight(world, x, y, dx, 0, goal) or \
-               _jump_straight(world, x, y, 0, dy, goal):
-                return (x, y)
-        else:
-            # Straight: stop at any forced neighbor
-            if _forced_straight(world, x, y, dx, dy):
-                return (x, y)
-
-    return None
-
-
-def _jump_straight(world, x, y, dx, dy, goal):
-    """Jump straight; returns furthest point before obstacle or None."""
-    cx, cy = x, y
-    while True:
-        cx += dx
-        cy += dy
-        if not world.is_walkable(cx, cy):
-            return None
-        if (cx, cy) == goal:
-            return (cx, cy)
-        if _forced_straight(world, cx, cy, dx, dy):
-            return (cx, cy)
-    return None
-
-
-def _forced_straight(world, x, y, dx, dy):
-    """Check for forced neighbors on straight moves."""
-    if dx != 0:  # horizontal
-        for sy in (-1, 1):
-            if not world.is_walkable(x, y + sy) and world.is_walkable(x + dx, y + sy):
-                return True
-    if dy != 0:  # vertical
-        for sx in (-1, 1):
-            if not world.is_walkable(x + sx, y) and world.is_walkable(x + sx, y + dy):
-                return True
-    return False
-
 
 # ═══════════════════════════════════════════════════════════════
 #  Utility
@@ -398,58 +271,158 @@ def _reconstruct(parent, node):
 
 
 # ═══════════════════════════════════════════════════════════════
-#  Algorithm 6: Weighted A* (terrain-aware)
+#  Algorithm 6: Weighted A* (terrain-aware, exponential flight fatigue)
 # ═══════════════════════════════════════════════════════════════
 
-# Diagonal penalty
+# Base movement costs
 _WEIGHT_COST = {
     (-1, -1): 1.5, (0, -1): 1, (1, -1): 1.5,
     (-1,  0): 1,                (1,  0): 1,
     (-1,  1): 1.5, (0,  1): 1, (1,  1): 1.5,
 }
 
+# Exponential flight fatigue — three curves, one counter
+_UP_BASE    = 2.0    # upward:  base penalty at air_step=1
+_UP_EXP     = 1.30   # upward:  steep exponential
+_HORIZ_BASE = 0.5    # horizontal: gentler base
+_HORIZ_EXP  = 1.20   # horizontal: slower growth than upward
+_DOWN_BASE  = 0.5    # downward: flat component
+_DOWN_LINEAR = 0.08  # downward: linear per air_step (nearly flat)
+
+_GROUND_BONUS = 0.7   # subtracted when on solid ground
+_LANDING_TAX  = 1.0   # one-time cost: airborne → ground (reduced)
+_TAKEOFF_TAX  = 0.5   # one-time cost: ground → upward flight (reduced)
+
 
 def pathfind_weighted(world, start, goal):
     """
-    Weighted A* — orthogonal=1, diagonal=1.5, ground bonus -0.7.
+    Weighted A* — terrain-aware with exponential flight fatigue.
 
-    Walking on solid ground costs 0.3/step (cheap).
-    Moving through air costs 1.0-1.5/step (normal).
-    Naturally biases paths toward the floor without forced post-processing.
+    State: (x, y, air_steps)  where air_steps = consecutive air steps.
+    Capped at _MAX_AIR to prevent state-space explosion.
+    Dominance pruning: (cost, air) — lower cost + lower air dominates.
+
+    Cost model per step (n = air_steps after this step):
+      Ground (any direction):  weight - 0.7           → 0.3 ~ 0.8
+      Air up:                  weight + 2.0×1.30^(n-1)  steep
+      Air horizontal:          weight + 0.5×1.20^(n-1)  gentler
+      Air down:                weight + 0.5 + 0.08×n     nearly flat
+
+    Transition taxes:
+      Landing  (+1.0):  airborne → solid ground
+      Takeoff  (+0.5):  ground → upward flight
     """
-    GROUND_BONUS = 0.7
+    _MAX_AIR  = 15   # cap consecutive air steps (beyond this, penalty is prohibitive)
+    _MAX_ITER = 200000  # safety net — abort if too many expansions
+
     open_set = MinHeap()
     closed_set = set()
-    g_score = {start: 0.0}
-    parent = {}
 
-    open_set.push(_octile_heuristic(start, goal), start)
+    start_state = (start[0], start[1], 0)
+    g_score = {start_state: 0.0}
+    parent = {start_state: None}
+
+    # Dominance tracking: (x, y) → list[best_g_at_air_0, ..., best_g_at_air_MAX]
+    # State (x,y,a1) with cost c1 dominates (x,y,a2) with cost c2 iff a1 <= a2 and c1 <= c2
+    best_at = {}
+
+    def _is_dominated(pos, air, cost):
+        """True if an existing state at `pos` has <= air AND <= cost."""
+        if pos not in best_at:
+            best_at[pos] = [float('inf')] * (_MAX_AIR + 1)
+            return False
+        arr = best_at[pos]
+        # Check states with air_steps <= `air` — if any has lower cost, we're dominated
+        for a in range(air + 1):
+            if arr[a] <= cost:
+                return True
+        return False
+
+    def _record_state(pos, air, cost):
+        """Register this (pos, air, cost) in the dominance table."""
+        arr = best_at[pos]
+        # Update this air level
+        if cost < arr[air]:
+            arr[air] = cost
+        # Propagate: if we have cost C at air A, any state at air > A
+        # with cost >= C is dominated → mark as inf (will be pruned later)
+        for a in range(air + 1, _MAX_AIR + 1):
+            if arr[a] >= cost:
+                arr[a] = min(arr[a], float('inf'))  # keep inf marker
+
+    open_set.push(_octile_heuristic(start, goal), start_state)
+    iterations = 0
 
     while not open_set.is_empty():
-        curr = open_set.pop()
-        if curr is None: break
-        if curr in closed_set: continue
-        if curr == goal:
-            return _reconstruct(parent, curr)
+        curr_state = open_set.pop()
+        if curr_state is None:
+            break
+        if curr_state in closed_set:
+            continue
 
-        closed_set.add(curr)
+        iterations += 1
+        if iterations > _MAX_ITER:
+            break  # safety net — return partial result
 
-        for nb in _grid_neighbors_8(world, curr):
-            if nb in closed_set: continue
-            dx = nb[0] - curr[0]
-            dy = nb[1] - curr[1]
+        cx, cy, curr_air = curr_state
+
+        if (cx, cy) == goal:
+            path = []
+            state = curr_state
+            while state is not None:
+                path.append((state[0], state[1]))
+                state = parent.get(state)
+            path.reverse()
+            return path
+
+        closed_set.add(curr_state)
+
+        for nb in _grid_neighbors_8(world, (cx, cy)):
+            dx = nb[0] - cx
+            dy = nb[1] - cy
+            nb_on_ground = not world.is_walkable(nb[0], nb[1] + 1)
+
             step_cost = _WEIGHT_COST.get((dx, dy), 1.0)
-            # Solid ground below = discount
-            if not world.is_walkable(nb[0], nb[1] + 1):
-                step_cost = max(0.1, step_cost - GROUND_BONUS)
 
-            g_new = g_score[curr] + step_cost
-            if nb not in g_score or g_new < g_score[nb]:
-                parent[nb] = curr
-                g_score[nb] = g_new
-                open_set.push(g_new + _octile_heuristic(nb, goal), nb)
+            if nb_on_ground:
+                # ── Solid ground ──
+                step_cost = max(0.1, step_cost - _GROUND_BONUS)
+                new_air = 0
+                if curr_air > 0:
+                    step_cost += _LANDING_TAX
+            else:
+                # ── In the air — cap new_air ──
+                new_air = curr_air + 1
+                if new_air > _MAX_AIR:
+                    continue  # too many consecutive air steps, path is non-viable
+                if dy < 0:
+                    step_cost += _UP_BASE * (_UP_EXP ** (new_air - 1))
+                    if curr_air == 0:
+                        step_cost += _TAKEOFF_TAX
+                elif dy > 0:
+                    step_cost += _DOWN_BASE + _DOWN_LINEAR * new_air
+                else:
+                    step_cost += _HORIZ_BASE * (_HORIZ_EXP ** (new_air - 1))
 
-    return None
+            g_new = g_score[curr_state] + step_cost
+
+            # ── Dominance pruning ──
+            nb_pos = (nb[0], nb[1])
+            if _is_dominated(nb_pos, new_air, g_new):
+                continue
+
+            nb_state = (nb[0], nb[1], new_air)
+
+            if nb_state in closed_set:
+                continue
+
+            if nb_state not in g_score or g_new < g_score[nb_state]:
+                parent[nb_state] = curr_state
+                g_score[nb_state] = g_new
+                _record_state(nb_pos, new_air, g_new)
+                open_set.push(g_new + _octile_heuristic(nb, goal), nb_state)
+
+    return None  # no path (or exceeded iteration limit)
 
 
 def _gravity_drop(world, path):

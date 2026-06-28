@@ -202,3 +202,69 @@ def _smooth_edges(world):
                 if world.is_walkable(x + dx, y + dy): n += 1
             if n <= 1: to_flip.append((x, y))
     for x, y in to_flip: world.set_cell(x, y, False)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Large-grid cave (1000x1000 — used by big mode)
+# ═══════════════════════════════════════════════════════════════
+
+def generate_cave_large(world, intensity=2.0, seed=None):
+    """Generate connected cave on large grids (adapted for 1000x1000)."""
+    if seed is not None:
+        random.seed(seed)
+    w, h = world.width, world.height
+    cx, cy = w // 2, h // 2
+
+    steps_total = int(w * h * 0.35 * intensity)
+    branch_chance = 0.025 * intensity
+    max_walkers = max(2, int(intensity * 6))
+    death_chance = 0.15
+    bloat_limit = 5
+
+    world.fill_all(False)
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            if 0 <= cx + dx < w and 0 <= cy + dy < h:
+                world.set_cell(cx + dx, cy + dy, True)
+
+    walkers = [(cx, cy)]
+    steps = 0
+    while walkers and steps < steps_total:
+        idx = random.randrange(len(walkers))
+        wx, wy = walkers[idx]
+        dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        random.shuffle(dirs)
+        moved = False
+        for dx, dy in dirs:
+            nx, ny = wx + dx, wy + dy
+            if not (2 < nx < w - 2 and 2 < ny < h - 2):
+                continue
+            open_n = sum(1 for ndx, ndy in ((-1, 0), (1, 0), (0, -1), (0, 1))
+                         if world.is_walkable(nx + ndx, ny + ndy))
+            if open_n >= bloat_limit:
+                continue
+            world.set_cell(nx, ny, True)
+            walkers[idx] = (nx, ny)
+            moved = True
+            break
+        if not moved:
+            walkers.pop(idx)
+            continue
+        steps += 1
+        if random.random() < branch_chance and len(walkers) < max_walkers:
+            walkers.append((wx, wy))
+        if len(walkers) > 1 and random.random() < death_chance:
+            walkers.pop(random.randrange(len(walkers)))
+
+    # Cleanup isolated cells
+    to_flip = []
+    for y in range(1, h - 1):
+        for x in range(1, w - 1):
+            if not world.is_walkable(x, y):
+                continue
+            n = sum(1 for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1))
+                    if world.is_walkable(x + dx, y + dy))
+            if n <= 1:
+                to_flip.append((x, y))
+    for x, y in to_flip:
+        world.set_cell(x, y, False)
