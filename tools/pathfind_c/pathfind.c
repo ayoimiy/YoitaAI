@@ -1,7 +1,4 @@
-/*
- * pathfind.c — Weighted A* with exponential flight fatigue
- * Uses direct-indexed arrays (no hash collisions) for deterministic results.
- */
+/* pathfind.c with P1+P2+P3 only (no gen counter) — test for correctness */
 #include "pathfind.h"
 #include <math.h>
 #include <string.h>
@@ -67,7 +64,7 @@ static inline float up_p(int n) { return up_pen[n < PEN_TABSZ ? n : PEN_TABSZ-1]
 static inline float hz_p(int n) { return hz_pen[n < PEN_TABSZ ? n : PEN_TABSZ-1]; }
 static inline float dn_p(int n) { return dn_pen[n < PEN_TABSZ ? n : PEN_TABSZ-1]; }
 
-/* ── 8-direction neighbours (Python order) ────────── */
+/* ── 8-direction neighbours ───────────────────────── */
 static int neighbours(const Grid *g, int cx, int cy, int *ox, int *oy, int mx) {
     static const int dx[] = {-1,-1,-1, 0,0,0, 1,1,1};
     static const int dy[] = {-1, 0, 1,-1,0,1,-1,0,1};
@@ -84,21 +81,19 @@ static int neighbours(const Grid *g, int cx, int cy, int *ox, int *oy, int mx) {
     return n;
 }
 
-/* ── Min-heap with deterministic tie-breaking ───────
- * Key format: double = f_score + state * 1e-12
- * When f-scores are equal, lower (x,y,air) wins.
- * This matches Python's tuple-comparison tie-breaking. */
+/* ── Min-heap ────────────────────────────────────── */
 #define TIE_EPS 1e-12
 typedef struct { uint64_t *n; double *k; int s, c; } Heap;
 static void hp_init(Heap *h, int cap) {
-    h->n = malloc((size_t)cap * 8); h->k = malloc((size_t)cap * 8);
+    h->n = (uint64_t *)malloc((size_t)cap * sizeof(uint64_t));
+    h->k = (double   *)malloc((size_t)cap * sizeof(double));
     h->s = 0; h->c = cap;
 }
 static void hp_free(Heap *h) { free(h->n); free(h->k); }
 static void hp_push(Heap *h, uint64_t nd, double key) {
     if (h->s >= h->c) { h->c *= 2;
-        h->n = realloc(h->n, (size_t)h->c * 8);
-        h->k = realloc(h->k, (size_t)h->c * 8); }
+        h->n = (uint64_t *)realloc(h->n, (size_t)h->c * sizeof(uint64_t));
+        h->k = (double   *)realloc(h->k, (size_t)h->c * sizeof(double)); }
     int i = h->s++;
     while (i > 0) { int p = (i-1)/2; if (key >= h->k[p]) break;
         h->n[i]=h->n[p]; h->k[i]=h->k[p]; i = p; }
@@ -128,24 +123,31 @@ static uint64_t hp_pop(Heap *h) {
     return r;
 }
 
-/* ── Direct-array state storage (no collisions) ──── */
+/* ── Direct-array state storage (original init, kept across calls) ── */
 #define AIR_MAX 15
-#define AIR_N   (AIR_MAX + 1)   /* 16 */
+#define AIR_N   (AIR_MAX + 1)
 
-static float    *g_arr = NULL;   /* g_score[state] */
-static uint64_t *p_arr = NULL;   /* parent[state]  */
-static uint8_t  *c_arr = NULL;   /* closed[state]  */
-static float    *d_arr = NULL;   /* dom[(x,y)*AIR_N + air] */
+static float    *g_arr = NULL;
+static uint64_t *p_arr = NULL;
+static uint8_t  *c_arr = NULL;
+static float    *d_arr = NULL;
 static int       g_W = 0, g_H = 0;
 
 static void arr_init(int W, int H) {
     size_t total = (size_t)W * H * AIR_N;
-    g_W = W; g_H = H;
-    free(g_arr); free(p_arr); free(c_arr); free(d_arr);
-    g_arr = (float    *)malloc(total * sizeof(float));
-    p_arr = (uint64_t *)malloc(total * sizeof(uint64_t));
-    c_arr = (uint8_t  *)calloc(total, 1);
-    d_arr = (float    *)malloc(total * sizeof(float));
+    if (g_W != W || g_H != H) {
+        /* Only realloc when map size changes (P0-lite) */
+        g_W = W; g_H = H;
+        free(g_arr); free(p_arr); free(c_arr); free(d_arr);
+        g_arr = (float    *)malloc(total * sizeof(float));
+        p_arr = (uint64_t *)malloc(total * sizeof(uint64_t));
+        c_arr = (uint8_t  *)calloc(total, 1);
+        d_arr = (float    *)malloc(total * sizeof(float));
+    } else {
+        /* Same size — just reset cheaply */
+        memset(c_arr, 0, total);
+    }
+    /* Full init (needed for correctness when reusing arrays) */
     for (size_t i = 0; i < total; i++) {
         g_arr[i] = INFINITY;
         p_arr[i] = ~0ULL;
@@ -176,9 +178,6 @@ static void dom_record(int x, int y, int air, float cost) {
     if (cost < d_arr[i]) d_arr[i] = cost;
 }
 
-/* ═══════════════════════════════════════════════════
- *  pathfind_weighted
- * ═══════════════════════════════════════════════════ */
 int pathfind_weighted(
     const Grid *g, int sx, int sy, int gx, int gy,
     int max_air, int max_iter, int **px, int **py, float *elapsed_ms)
@@ -189,7 +188,8 @@ int pathfind_weighted(
 
     arr_init(g->w, g->h);
 
-    Heap open; hp_init(&open, 65536);
+    /* P1: Pre-allocate heap to 1M slots */
+    Heap open; hp_init(&open, 1 << 20);
 
     uint64_t ss = STATE(sx, sy, 0);
     G_SET(sx, sy, 0, 0.0f);
@@ -203,35 +203,36 @@ int pathfind_weighted(
     while (open.s > 0 && iter < max_iter) {
         uint64_t cs = hp_pop(&open);
         int cx = STATE_X(cs), cy = STATE_Y(cs), ca = STATE_AIR(cs);
-        if (C_TEST(cx, cy, ca)) continue;
-        C_SET(cx, cy, ca);
+
+        /* P3: Cache state index for this expand */
+        size_t ci = st_idx(cx, cy, ca);
+        if (c_arr[ci]) continue;
+        c_arr[ci] = 1;
         iter++;
 
         if (cx == gx && cy == gy) { gs = cs; break; }
 
+        float cur_g = g_arr[ci];
         int nc = neighbours(g, cx, cy, ox, oy, 8);
 
         for (int i = 0; i < nc; i++) {
             int nx = ox[i], ny = oy[i];
             int dxi = nx - cx + 1, dyi = ny - cy + 1;
             float step = wcost[dyi][dxi];
+            int dr = ny - cy;
             int ng = !grid_walkable(g, nx, ny + 1);
             int na;
 
-            int dr = ny - cy;
-
             if (ng) {
-                /* ── Solid ground ── */
                 step = (step - 0.7f > 0.1f) ? step - 0.7f : 0.1f;
                 na = 0;
-                if (ca > 0) step += 1.0f;  /* landing tax */
+                if (ca > 0) step += 1.0f;
             } else {
-                /* ── In the air ── */
                 na = ca + 1;
-                if (na > AIR_MAX) continue;  /* _MAX_AIR cap */
+                if (na > AIR_MAX) continue;
                 if (dr < 0) {
                     step += up_p(na);
-                    if (ca == 0) step += 0.5f;  /* takeoff tax */
+                    if (ca == 0) step += 0.5f;
                 } else if (dr > 0) {
                     step += dn_p(na);
                 } else {
@@ -239,14 +240,13 @@ int pathfind_weighted(
                 }
             }
 
-            float gn = G_GET(cx, cy, ca) + step;
+            float gn = cur_g + step;
 
+            /* P2: closed → g_score → dom (cheapest first) */
+            size_t ni = st_idx(nx, ny, na);
+            if (c_arr[ni]) continue;
+            if (gn >= g_arr[ni]) continue;
             if (dom_dominated(nx, ny, na, gn)) continue;
-
-            if (C_TEST(nx, ny, na)) continue;
-
-            float old_g = G_GET(nx, ny, na);
-            if (gn >= old_g) continue;
 
             G_SET(nx, ny, na, gn);
             P_SET(nx, ny, na, cs);
