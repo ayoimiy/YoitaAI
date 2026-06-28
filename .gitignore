@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 command.txt
+pf_in.bin
+pf_out.bin
+log_*.txt

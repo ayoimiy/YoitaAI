@@ -37,5 +37,6 @@ local function wi(v)
 end
 if path then wi(#path) else wi(0) end
 wi(ems)
-if path then for _, p in ipairs(path) do wi(p[1]); wi(p[2]) end end
+if path then for _, p in ipairs(path) do wi(p[1]) end end
+if path then for _, p in ipairs(path) do wi(p[2]) end end
 of:close()

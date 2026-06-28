@@ -123,7 +123,7 @@ function pathfind_weighted(world, W, H, sx, sy, gx, gy)
     local goal_node = nil
     local iter = 0
 
-    while #open.n > 0 and iter < 200000 do
+    while #open.n > 0 and iter < 2000000 do
         local cs = heap_pop(open)
         if not cs then break end
         local cx, cy, ca = cs[1], cs[2], cs[3]

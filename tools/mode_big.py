@@ -75,8 +75,8 @@ def _pathfind_lua(world, start, goal):
             for x in range(w): data[off + x] = 1 if row[x] else 0
         f.write(data)
     try:
-        _sp.run([LUA_EXE, str(LUA_RUNNER), str(PF_IN), str(PF_OUT)],
-                cwd=str(LUA_RUNNER.parent), check=True, timeout=120,
+        _sp.run([LUA_EXE, str(LUA_RUNNER.resolve()), str(PF_IN.resolve()), str(PF_OUT.resolve())],
+                cwd=str(LUA_RUNNER.parent.resolve()), check=True, timeout=120,
                 creationflags=_sp.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
     except Exception as e:
         print(f"Lua error: {e}"); return [], 0
@@ -91,6 +91,38 @@ def _pathfind_lua(world, start, goal):
     except Exception as e:
         print(f"Lua result error: {e}"); return [], 0
 
+# ── Lua→C bridge (Lua calls compiled C DLL via require) ──
+LUA_C_RUNNER = ROOT / "pathfind_c" / "lua_c_runner.lua"
+
+def _pathfind_lua_c(world, start, goal):
+    """Same as _pathfind_lua but runner calls C via require('pathfind_c')"""
+    w, h = world.width, world.height
+    with open(PF_IN, "wb") as f:
+        f.write(_struct.pack("i", w)); f.write(_struct.pack("i", h))
+        f.write(_struct.pack("i", start[0])); f.write(_struct.pack("i", start[1]))
+        f.write(_struct.pack("i", goal[0])); f.write(_struct.pack("i", goal[1]))
+        data = bytearray(w * h)
+        for y in range(h):
+            row = world.cells[y]; off = y * w
+            for x in range(w): data[off + x] = 1 if row[x] else 0
+        f.write(data)
+    try:
+        _sp.run([LUA_EXE, str(LUA_C_RUNNER.resolve()), str(PF_IN.resolve()), str(PF_OUT.resolve())],
+                cwd=str(LUA_C_RUNNER.parent.resolve()), check=True, timeout=30,
+                creationflags=_sp.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
+    except Exception as e:
+        print(f"Lua->C error: {e}"); return [], 0
+    try:
+        with open(PF_OUT, "rb") as f:
+            plen = _struct.unpack("i", f.read(4))[0]
+            ems  = _struct.unpack("i", f.read(4))[0]
+            if plen <= 0: return [], ems
+            px = _struct.unpack(f"{plen}i", f.read(4 * plen))
+            py = _struct.unpack(f"{plen}i", f.read(4 * plen))
+        return list(zip(px, py)), ems
+    except Exception as e:
+        print(f"Lua->C result error: {e}"); return [], 0
+
 # ── Algorithm registry ──────────────────────────────
 ALGOS = {
     "1. A* (py)":          pathfind_astar,
@@ -101,6 +133,7 @@ ALGOS = {
     "6. Weighted (py)":     pathfind_weighted,
     "7. Weighted (C)":      _pathfind_c,
     "8. Weighted (Lua)":    _pathfind_lua,
+    "9. Weighted (Lua->C)": _pathfind_lua_c,
 }
 ALGO_KEYS = list(ALGOS.keys())
 
@@ -283,12 +316,12 @@ def main():
             if event.type == QUIT or (event.type == KEYDOWN and event.key == K_ESCAPE):
                 running = False
             elif event.type == KEYDOWN:
-                if pygame.K_1 <= event.key <= pygame.K_8:
+                if pygame.K_1 <= event.key <= pygame.K_9:
                     algo_idx = event.key - pygame.K_1
                 elif event.key == pygame.K_t and target_pos:
                     algo_name = ALGO_KEYS[algo_idx]
                     algo_func = ALGOS[algo_name]
-                    if algo_func in (_pathfind_c, _pathfind_lua):
+                    if algo_func in (_pathfind_c, _pathfind_lua, _pathfind_lua_c):
                         path, elapsed_ms = algo_func(world, player_pos, target_pos)
                     else:
                         t0 = time.perf_counter()
