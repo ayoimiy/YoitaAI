@@ -95,14 +95,14 @@ local function find_near_block(x,y)
     local key = nx .. "_" .. ny
 
     for block_id,nodes in pairs(blocks_nodes) do
-        local exist,id = nodes:exist2(x,y,curr_chunk_key)
+        local exist,id = nodes:exist2(x,y)
         if exist then
             return block_id,nx,ny
         else
             local nnodes = nodes:get_neighbors(id)
             for i,v in ipairs(nnodes) do 
                 if nodes:exist(v) then
-                    return block_id,nodes.get_pos2(v,curr_chunk_key)
+                    return block_id,nodes:get_pos(v)
                 end
             end
         end
@@ -390,7 +390,7 @@ function SmallFind:move(player,from_node, to_node,is_change,block_id,sx,sy)
 
         print("[SmallFind]Path finding started, received delegation info: " .. string.format("Nodes " .. from_node .. "--->" .. to_node))
      
-        self:find(nodes:to_nodes2(curr_chunk_key),target_nodes,sx,sy)
+        self:find(nodes:to_nodes(),target_nodes,sx,sy)
 
         debug_all_nodes = nodes
         debug_target_nodes = target_nodes
@@ -492,7 +492,7 @@ M.debug = {
         if not nodes then
             return {}
         end
-        return nodes_to_nodes(nodes:to_nodes2(curr_chunk_key))
+        return nodes_to_nodes(nodes:to_nodes())
     end,
     index = function ()
         return SmallFind.path_index

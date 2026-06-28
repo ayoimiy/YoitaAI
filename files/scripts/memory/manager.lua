@@ -88,17 +88,36 @@ local Directions = {
 ---@class NodeSet
 ---@field nodes table<number,boolean>
 ---@field count number
+---@field sx number 区块原点x
+---@field sy number 区块原点y
 local NodeSet = data_class()
 ---@return NodeSet
-function NodeSet:new()
+---@param cx number 区块原点x
+---@param cy number 区块原点y
+function NodeSet:new(cx,cy)
     local obj = setmetatable({
         nodes = {},
         count = 0,
+        sx = cx * width,
+        sy = cy * width
     },NodeSet)
     return obj
 end
-function NodeSet:add(x,y,sx,sy)
-    local id = NodeSet.get_id(x,y,sx,sy)
+--基于现有对象产生新对象
+---@return NodeSet
+function NodeSet:derive()
+    local obj = setmetatable({
+        nodes = {},
+        count = 0,
+        sx = self.sx,
+        sy = self.sy
+    },NodeSet)
+    return obj
+end
+
+
+function NodeSet:add(x,y)
+    local id = self:get_id(x,y)
     self:add_from_id(id)
     return id
 end
@@ -107,21 +126,17 @@ function NodeSet:add_from_id(id)
     self.count = self.count + 1
 end
 ---@param id number
----@param sx number
----@param sy number
 ---@return number,number
-function NodeSet.get_pos(id,sx,sy)
+function NodeSet:get_pos(id)
     local ix = id % width_num
     local iy = math.floor(id / width_num)
-    return ix * node_size + sx, iy * node_size + sy
-end
-function NodeSet.get_pos2(id,chunk_id)
-    local chunk = Chunk_data[chunk_id]
-    local sx,sy = chunk.cx * width,chunk.cy * height
-    return NodeSet.get_pos(id,sx,sy)
+    return ix *  node_size + self.sx, iy * node_size + self.sy
 end
 
-function NodeSet.get_id(x,y,sx,sy)
+---@param x number
+---@param y number
+function NodeSet:get_id(x,y)
+    local sx,sy = self.sx,self.sy
     local ix = math.floor((x - sx) / node_size)
     local iy = math.floor((y - sy) / node_size)
     return ix + iy * width_num
@@ -146,10 +161,8 @@ end
 ---@param x number
 ---@param y number
 ---@return boolean,number id 
-function NodeSet:exist2(x,y,chunk_id)
-    local chunk = Chunk_data[chunk_id]
-    local sx,sy = chunk.cx * width, chunk.cy * height
-    local id = NodeSet.get_id(x,y,sx,sy)
+function NodeSet:exist2(x,y)
+    local id = self:get_id(x,y)
     return self.nodes[id] ~= nil,id
 end
 
@@ -185,27 +198,13 @@ function NodeSet:get_neighbors(id)
     return neighbors
 end
 ---将内部 nodes 转为 {["x_y"] = boolean} 格式
----@param sx number 区块原点x
----@param sy number 区块原点y
 ---@return table<string,boolean>
-function NodeSet:to_nodes(sx, sy)
+function NodeSet:to_nodes()
     local out = {}
     for id, state in pairs(self.nodes) do
         local ix = id % width_num
         local iy = math.floor(id / width_num)
-        out[ix * node_size + sx .. "_" .. iy * node_size + sy] = state
-    end
-    return out
-end
-
-function NodeSet:to_nodes2(chunk_id)
-    local out = {}
-    local chunk = Chunk_data[chunk_id]
-    local sx,sy = chunk.cx * width, chunk.cy * height
-    for id, state in pairs(self.nodes) do
-        local ix = id % width_num
-        local iy = math.floor(id / width_num)
-        out[ix * node_size + sx .. "_" .. iy * node_size + sy] = state
+        out[ix * node_size + self.sx .. "_" .. iy * node_size + self.sy] = state
     end
     return out
 end
@@ -219,7 +218,7 @@ local edge = {
 }
 ---@return NodeSet
 function NodeSet:get_edges_nodes()
-    local out = NodeSet:new()
+    local out = self:derive()
     for i,v in ipairs(edge) do 
         local offset = v.offset
         for x = offset[1], offset[3] do
@@ -235,7 +234,7 @@ function NodeSet:get_edges_nodes()
 end
 
 function NodeSet:get_inner_nodes()
-    local out = NodeSet:new()
+    local out = self:derive()
     for x = 1, width_num- 2 do
         for y = 1, height_num - 2 do
             local id = x + y * width_num
@@ -275,9 +274,11 @@ local function encode_edge_key(nodes)
 end
 ---@param key string
 ---@param dir? Direction 若不传则全部解码
+---@param cx number
+---@param cy number
 ---@return NodeSet
-local function decode_edge_key(key,dir)
-    local edge_nodes = NodeSet:new()
+local function decode_edge_key(key,dir,cx,cy)
+    local edge_nodes = NodeSet:new(cx,cy)
     local count = 0
     for i,v in ipairs(edge) do 
         local offset = v.offset
@@ -324,11 +325,9 @@ end
 ---@param nodes NodeSet 所有符合条件的节点集合
 ---@param edge_set NodeSet 边节点集合
 ---@param start_node number 开始点id
----@param sx number 区块原点x
----@param sy number 区块原点y
 ---@return NodeSet comp 连通点集
-local function bfs(nodes,edge_set,start_node,sx,sy)
-    local Component = NodeSet:new()
+local function bfs(nodes,edge_set,start_node)
+    local Component = nodes:derive()
     -- 创建队列
     local queue = {}
     -- 从起点出发
@@ -340,10 +339,10 @@ local function bfs(nodes,edge_set,start_node,sx,sy)
         --取出一个节点
         local node = table.remove(queue,1)
         local neighbors = nodes:get_neighbors(node)
-        local x,y = NodeSet.get_pos(node,sx,sy)
+        local x,y = nodes:get_pos(node)
         --寻找邻居节点
         for k,n_node in pairs(neighbors) do
-            local nx,ny = NodeSet.get_pos(n_node,sx,sy) 
+            local nx,ny = nodes:get_pos(n_node)
             if nodes:get_state(n_node) == false  and raytrace5({x=x,y=y},{x=nx,y=ny}) then
                 --检查是不是两个都是边界点
                 if not (edge_set:exist(node) and edge_set:exist(n_node)) then
@@ -426,12 +425,12 @@ end
 function Chunk:to_nodes()
     local sx = self.cx * width
     local sy = self.cy * height
-    local nodes = NodeSet:new()
+    local nodes = NodeSet:new(self.cx,self.cy)
     for y = sy,sy + height,node_size do 
         for x = sx,sx + width,node_size do
             local node_key = x .. "_" .. y
             if check_node(node_key) then
-                nodes:add(x,y,sx,sy)
+                nodes:add(x,y)
             end
         end
     end
@@ -441,13 +440,12 @@ end
 ---@return NodeSet[] comps
 function Chunk:get_nodes()
     local comps = {}
-    local sx,sy = self.cx * width,self.cy * height
     local nodes = self:to_nodes()
     local edge_set = nodes:get_edges_nodes()
     local inner_set = nodes:get_inner_nodes()
     for node_id in pairs(inner_set.nodes) do
         if nodes:get_state(node_id) == false then
-            local comp = bfs(nodes,edge_set,node_id,sx,sy)
+            local comp = bfs(nodes,edge_set,node_id)
             if comp.count > 1 then
                 table.insert(comps,comp)
             end
@@ -521,10 +519,10 @@ local function Create_new_blocks(block_fps,chunk_key)
             for _,nblock_id in ipairs(nblocks) do 
                 local nblock = Block_data[nblock_id]
 
-                local nedge_set =  decode_edge_key(nblock.hash_key,-dir)
-                local edge_set = decode_edge_key(block.hash_key,dir)
+                local nedge_set =  decode_edge_key(nblock.hash_key,-dir,cx,cy)
+                local edge_set = decode_edge_key(block.hash_key,dir,chunk.cx,chunk.cy)
 
-                local inter_set,count = get_inter_set(nedge_set:to_nodes(cx * width,cy * height),edge_set:to_nodes(chunk.cx * width,chunk.cy * height))
+                local inter_set,count = get_inter_set(nedge_set:to_nodes(),edge_set:to_nodes())
                 if count > 0 then
                    --建立连接关系
                     block.neighbors[nblock.id] = true
@@ -537,13 +535,13 @@ local function Create_new_blocks(block_fps,chunk_key)
             --当区块已存在时，不应该还残存旧块的占位
             block.neighbors[key] = nil
         else    
-            local edge_set = decode_edge_key(block.hash_key,dir)
+            local edge_set = decode_edge_key(block.hash_key,dir,chunk.cx,chunk.cy)
             
             if edge_set.count > 0 then 
                     --检查边界点是否可以进入该区块
                 local count = 0
 
-                local nodes_set = edge_set:to_nodes(chunk.cx,chunk.cy)
+                local nodes_set = edge_set:to_nodes()
                 for node_key in pairs(nodes_set) do 
                     if check_node(node_key) then
                         count = count + 1
@@ -703,7 +701,7 @@ function M.get_block_edge(from_node,to_node)
         local cx,cy = to_node:match("(-?%d+)_(-?%d+)")
         cx,cy = tonumber(cx),tonumber(cy)
         local dir = Direction:new(cx - chunk1.cx, cy - chunk1.cy)
-        local edge_set = decode_edge_key(block1.hash_key,dir):to_nodes(chunk1.cx * width,chunk1.cy * height)
+        local edge_set = decode_edge_key(block1.hash_key,dir,chunk1.cx,chunk1.cy):to_nodes(chunk1.cx * width,chunk1.cy * height)
         for k,v in pairs(edge_set) do 
             local x,y = k:match("(-?%d+)_(-?%d+)")
             x,y = tonumber(x),tonumber(y)
@@ -719,8 +717,8 @@ function M.get_block_edge(from_node,to_node)
         local chunk2 = Chunk_data[block2.chunk_key]
         local dir = Direction:new(chunk2.cx - chunk1.cx, chunk2.cy - chunk1.cy)
 
-        local edge_set1 = decode_edge_key(block1.hash_key,dir):to_nodes(chunk1.cx * width,chunk1.cy * height)
-        local edge_set2 = decode_edge_key(block2.hash_key,-dir):to_nodes(chunk2.cx * width,chunk2.cy * height)
+        local edge_set1 = decode_edge_key(block1.hash_key,dir,chunk1.cx,chunk1.cy):to_nodes()
+        local edge_set2 = decode_edge_key(block2.hash_key,-dir,chunk2.cx,chunk2.cy):to_nodes()
         local inter_set = get_inter_set(edge_set1,edge_set2)
         for k in pairs(inter_set) do
             local x,y = k:match("(-?%d+)_(-?%d+)")
