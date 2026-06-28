@@ -99,7 +99,7 @@ function NodeSet:new(cx,cy)
         nodes = {},
         count = 0,
         sx = cx * width,
-        sy = cy * width
+        sy = cy * height
     },NodeSet)
     return obj
 end
@@ -125,6 +125,7 @@ function NodeSet:add_from_id(id)
     self.nodes[id] = false
     self.count = self.count + 1
 end
+--获取真实坐标
 ---@param id number
 ---@return number,number
 function NodeSet:get_pos(id)
@@ -158,6 +159,7 @@ end
 function NodeSet:exist(id)
     return self.nodes[id] ~= nil
 end
+---节点是否存储该真实坐标
 ---@param x number
 ---@param y number
 ---@return boolean,number id 
@@ -208,6 +210,20 @@ function NodeSet:to_nodes()
     end
     return out
 end
+---获取交集，sx,sy以对象本身为原点
+---@param node_set NodeSet
+---@return NodeSet
+function NodeSet:get_inter_set(node_set)
+    local out = self:derive()   
+    for k in pairs(self.nodes) do
+        local x,y = self:get_pos(k)
+        if node_set:exist2(x,y) then
+            out:add_from_id(k)
+        end
+    end
+    return out
+end
+
 
 
 local edge = {
@@ -216,6 +232,7 @@ local edge = {
     {dir = Directions.TOP, offset = {1, 0, width_num - 2, 0}},
     {dir = Directions.LEFT, offset = {0, 1, 0, height_num - 2}},
 }
+--取边点
 ---@return NodeSet
 function NodeSet:get_edges_nodes()
     local out = self:derive()
@@ -232,7 +249,7 @@ function NodeSet:get_edges_nodes()
     end
     return out
 end
-
+--取内点
 function NodeSet:get_inner_nodes()
     local out = self:derive()
     for x = 1, width_num- 2 do
@@ -357,9 +374,9 @@ local function bfs(nodes,edge_set,start_node)
 end
 
 --检查某个点是否可用
----@param node_key string
-local function check_node(node_key)
-    local x,y = node_key:match("(-?%d+)_(-?%d+)")
+---@param x number
+---@param y number
+local function check_node(x,y)
     if RaytracePlatforms(x,y,x+1,y) then
        return false 
     end
@@ -428,8 +445,7 @@ function Chunk:to_nodes()
     local nodes = NodeSet:new(self.cx,self.cy)
     for y = sy,sy + height,node_size do 
         for x = sx,sx + width,node_size do
-            local node_key = x .. "_" .. y
-            if check_node(node_key) then
+            if check_node(x,y) then
                 nodes:add(x,y)
             end
         end
@@ -518,12 +534,11 @@ local function Create_new_blocks(block_fps,chunk_key)
             local nblocks = nchunk.blocks
             for _,nblock_id in ipairs(nblocks) do 
                 local nblock = Block_data[nblock_id]
-
                 local nedge_set =  decode_edge_key(nblock.hash_key,-dir,cx,cy)
                 local edge_set = decode_edge_key(block.hash_key,dir,chunk.cx,chunk.cy)
 
-                local inter_set,count = get_inter_set(nedge_set:to_nodes(),edge_set:to_nodes())
-                if count > 0 then
+                local inter_set = edge_set:get_inter_set(nedge_set)
+                if inter_set.count > 0 then
                    --建立连接关系
                     block.neighbors[nblock.id] = true
                     nblock.neighbors[block.id] = true
@@ -538,12 +553,11 @@ local function Create_new_blocks(block_fps,chunk_key)
             local edge_set = decode_edge_key(block.hash_key,dir,chunk.cx,chunk.cy)
             
             if edge_set.count > 0 then 
-                    --检查边界点是否可以进入该区块
+                --检查边界点是否可以进入该区块
                 local count = 0
-
-                local nodes_set = edge_set:to_nodes()
-                for node_key in pairs(nodes_set) do 
-                    if check_node(node_key) then
+                for id in pairs(edge_set.nodes) do
+                    local x,y = edge_set:get_pos(id)
+                    if check_node(x,y) then
                         count = count + 1
                     end
                 end
@@ -686,7 +700,7 @@ local M = {
 ---用于确定跨block移动时的"门"位置
 ---@param from_node number|string 连通块1 id
 ---@param to_node number|string 连通块2 id
----@return table<string, boolean> target_set
+---@return NodeSet target_set
 function M.get_block_edge(from_node,to_node)
     if type(from_node) ~= "number" then
         print("[get_block_edge] from_node type error:" .. tostring(from_node))
@@ -701,14 +715,13 @@ function M.get_block_edge(from_node,to_node)
         local cx,cy = to_node:match("(-?%d+)_(-?%d+)")
         cx,cy = tonumber(cx),tonumber(cy)
         local dir = Direction:new(cx - chunk1.cx, cy - chunk1.cy)
-        local edge_set = decode_edge_key(block1.hash_key,dir,chunk1.cx,chunk1.cy):to_nodes(chunk1.cx * width,chunk1.cy * height)
-        for k,v in pairs(edge_set) do 
-            local x,y = k:match("(-?%d+)_(-?%d+)")
-            x,y = tonumber(x),tonumber(y)
+        local edge_set = decode_edge_key(block1.hash_key,dir,chunk1.cx,chunk1.cy)
+        target_set = NodeSet:new(cx,cy)
+        for id in pairs(edge_set.nodes) do
+            local x,y = edge_set:get_pos(id)
             local nx,ny = x + dir.dx * node_size  ,y + dir.dy *node_size
-            local key = nx .. "_" .. ny
-            if check_node(key) and raytrace5({x = x, y = y},{x = nx, y = ny}) then
-                target_set[key] = true
+            if check_node(nx,ny) and raytrace5({x = x, y = y},{x = nx, y = ny}) then
+                target_set:add(nx,ny)
             end
         end
     elseif  type(to_node) == "number" then
@@ -717,22 +730,21 @@ function M.get_block_edge(from_node,to_node)
         local chunk2 = Chunk_data[block2.chunk_key]
         local dir = Direction:new(chunk2.cx - chunk1.cx, chunk2.cy - chunk1.cy)
 
-        local edge_set1 = decode_edge_key(block1.hash_key,dir,chunk1.cx,chunk1.cy):to_nodes()
-        local edge_set2 = decode_edge_key(block2.hash_key,-dir,chunk2.cx,chunk2.cy):to_nodes()
-        local inter_set = get_inter_set(edge_set1,edge_set2)
-        for k in pairs(inter_set) do
-            local x,y = k:match("(-?%d+)_(-?%d+)")
-            x,y = tonumber(x),tonumber(y)
+        local edge_set1 = decode_edge_key(block1.hash_key,dir,chunk1.cx,chunk1.cy)
+        local edge_set2 = decode_edge_key(block2.hash_key,-dir,chunk2.cx,chunk2.cy)
+        local inter_set = edge_set1:get_inter_set(edge_set2)
+        target_set = NodeSet:new(chunk2.cx,chunk2.cy)
+        for id in pairs(inter_set.nodes) do
+            local x,y = inter_set:get_pos(id)
             local nx,ny = x + dir.dx * node_size  ,y + dir.dy *node_size
-            local key = nx .. "_" .. ny
-            if check_node(key) and raytrace5({x = x,y =y},{x = nx,y = ny}) then
-                target_set[key] = true
+            if check_node(nx,ny) and raytrace5({x = x,y =y},{x = nx,y = ny}) then
+                target_set:add(nx,ny)
             end
         end
     else
         print("[get_block_edge] to_node type error")
     end
-    return target_set
+    return target_set:to_nodes()
 end
 
 return M
