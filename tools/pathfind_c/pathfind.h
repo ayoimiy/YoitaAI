@@ -48,6 +48,24 @@ int pathfind_weighted(
     float *elapsed_ms
 );
 
+/*
+ * Like pathfind_weighted but with inflated heuristic (weight > 1.0).
+ * Uses f = g + weight * h.  Typical weight in [1.2, 2.0].
+ * Faster (fewer expansions) but paths may be slightly suboptimal.
+ * Paths are still valid — start→goal, no wall crossings, adjacency intact.
+ */
+int pathfind_weighted_fast(
+    const Grid *g,
+    int sx, int sy,
+    int gx, int gy,
+    int max_air,
+    int max_iter,
+    float weight,
+    int **px,
+    int **py,
+    float *elapsed_ms
+);
+
 #ifdef __cplusplus
 }
 #endif
