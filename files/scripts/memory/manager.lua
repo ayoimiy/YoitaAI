@@ -138,6 +138,10 @@ end
 ---@param y number
 function NodeSet:get_id(x,y)
     local sx,sy = self.sx,self.sy
+    if x < sx or x > sx + width or y < sy or y > sy + height then
+        error("pos error! NodeSet")
+        return -1
+    end
     local ix = math.floor((x - sx) / node_size)
     local iy = math.floor((y - sy) / node_size)
     return ix + iy * width_num
@@ -162,11 +166,23 @@ end
 ---节点是否存储该真实坐标
 ---@param x number
 ---@param y number
----@return boolean,number id 
+---@return boolean,number
 function NodeSet:exist2(x,y)
     local id = self:get_id(x,y)
     return self.nodes[id] ~= nil,id
 end
+---@param x number
+---@param y number
+---@return boolean,number
+function NodeSet:exist3(x,y)
+    local sx,sy = self.sx,self.sy
+    if x < sx or x > sx + width or y < sy or y > sy + height then
+        return false,-1
+    end
+    local id = self:get_id(x,y)
+    return self.nodes[id] ~= nil,id
+end
+
 
 
 --曼巴顿距离
@@ -198,17 +214,6 @@ function NodeSet:get_neighbors(id)
         end
     end
     return neighbors
-end
----将内部 nodes 转为 {["x_y"] = boolean} 格式
----@return table<string,boolean>
-function NodeSet:to_nodes()
-    local out = {}
-    for id, state in pairs(self.nodes) do
-        local ix = id % width_num
-        local iy = math.floor(id / width_num)
-        out[ix * node_size + self.sx .. "_" .. iy * node_size + self.sy] = state
-    end
-    return out
 end
 ---获取交集，sx,sy以对象本身为原点
 ---@param node_set NodeSet
@@ -744,7 +749,7 @@ function M.get_block_edge(from_node,to_node)
     else
         print("[get_block_edge] to_node type error")
     end
-    return target_set:to_nodes()
+    return target_set
 end
 
 return M

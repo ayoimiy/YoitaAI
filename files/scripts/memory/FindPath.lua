@@ -296,14 +296,14 @@ end
 
 
 
----@param nodes table<string,boolean>
----@param target_nodes table<string,boolean>
+---@param nodes NodeSet
+---@param target_nodes NodeSet
 ---@param sx number
 ---@param sy number
 function SmallFind:find(nodes,target_nodes,sx,sy)
     print("\n")
     print("SmallFind start")
-    print("useful nodes: " .. table_length(nodes))
+    print("useful nodes: " .. table_length(nodes.nodes))
     print("target nodes: " .. table_length(target_nodes))
     print("start pos: " .. sx .. "," .. sy)
     local config = AStarConfig:new()
@@ -324,7 +324,7 @@ function SmallFind:find(nodes,target_nodes,sx,sy)
                     local x = node.x + dx * node_size
                     local y = node.y + dy * node_size
                     local key = x .. "_" .. y
-                    if nodes[key] ~= nil or target_nodes[key] ~= nil then
+                    if nodes:exist3(x,y) or target_nodes:exist3(x,y) then
                         local count = Raytrace5check(node,{x=x,y=y})
                         if count < 3 then
                             table.insert(neighbors,{x = x, y = y })
@@ -359,8 +359,7 @@ function SmallFind:find(nodes,target_nodes,sx,sy)
         end
     end
     config.is_goal = function(node)
-        local key  = node.x .. "_" .. node.y
-        if target_nodes[key] ~= nil  then
+        if target_nodes:exist3(node.x,node.y) then
             return true
         end
         return false
@@ -390,7 +389,7 @@ function SmallFind:move(player,from_node, to_node,is_change,block_id,sx,sy)
 
         print("[SmallFind]Path finding started, received delegation info: " .. string.format("Nodes " .. from_node .. "--->" .. to_node))
      
-        self:find(nodes:to_nodes(),target_nodes,sx,sy)
+        self:find(nodes,target_nodes,sx,sy)
 
         debug_all_nodes = nodes
         debug_target_nodes = target_nodes
@@ -465,12 +464,11 @@ end
 
 --#region debug
 
----@param nodes table<string,boolean>
+---@param nodes NodeSet
 local function nodes_to_nodes(nodes)
     local ret = {}
-    for k,v in pairs(nodes or {}) do
-        local x,y = k:match("(-?%d+)_(-?%d+)")
-        x,y = tonumber(x),tonumber(y)
+    for id in pairs(nodes.nodes) do 
+        local x,y = nodes:get_pos(id)
         table.insert(ret,{x=x,y=y})
     end
     return ret
@@ -492,7 +490,7 @@ M.debug = {
         if not nodes then
             return {}
         end
-        return nodes_to_nodes(nodes:to_nodes())
+        return nodes_to_nodes(nodes)
     end,
     index = function ()
         return SmallFind.path_index
