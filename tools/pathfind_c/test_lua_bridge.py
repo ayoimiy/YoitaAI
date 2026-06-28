@@ -126,23 +126,46 @@ def test_lua_c_compute():
         py_result = pathfind_weighted(world, (sx, sy), (gx, gy))
         py_path = [(x, y) for x, y in py_result] if py_result else None
 
-        # Reference segment classification (matching mode_big.py:223-235)
+        # Reference segment classification (8-neighbour flood-fill + geometric over-limit)
         py_seg = []
         if py_path:
+            n = len(py_path)
             floating = [world.is_walkable(p[0], p[1] + 1) for p in py_path]
-            long_run = [False] * len(py_path)
-            rs = 0
-            for i in range(1, len(py_path) + 1):
-                flt = floating[i - 1] if i <= len(py_path) else True
-                if not flt:
-                    if i - 1 - rs >= 10:
-                        for j in range(rs, i - 1):
-                            long_run[j] = True
-                    rs = i
-            if len(py_path) - rs >= 10:
-                for j in range(rs, len(py_path)):
-                    long_run[j] = True
-            py_seg = [2 if long_run[i] else (1 if floating[i] else 0) for i in range(len(py_path))]
+            py_seg = [0] * n
+
+            # 8-neighbour flood-fill groups
+            group = [-1] * n
+            n_groups = 0
+            for i in range(n):
+                if not floating[i] or group[i] >= 0:
+                    continue
+                q = [i]; group[i] = n_groups
+                while q:
+                    cur = q.pop()
+                    cx, cy = py_path[cur]
+                    for j in range(n):
+                        if not floating[j] or group[j] >= 0:
+                            continue
+                        if abs(cx - py_path[j][0]) <= 1 and abs(cy - py_path[j][1]) <= 1:
+                            group[j] = n_groups
+                            q.append(j)
+                n_groups += 1
+
+            gs = [0] * n_groups
+            for i in range(n):
+                if group[i] >= 0: gs[group[i]] += 1
+
+            for i in range(n):
+                if floating[i]:
+                    py_seg[i] = 2 if (group[i] >= 0 and gs[group[i]] >= 10) else 1
+
+            # Geometric over-limit
+            air_cnt = 0
+            for i in range(n):
+                if floating[i]: air_cnt += 1
+                else: air_cnt = 0
+                if air_cnt > 15:
+                    py_seg[i] = 3  # overrides seg 1 or 2
 
         # Write input file
         with open(PF_IN, "wb") as f:
@@ -237,12 +260,12 @@ print("SEG: " .. table.concat(r.seg or {{}}, ","))
             failed += 1
         elif lua_seg != py_seg:
             print(f"  FAIL test {test_id} ({w}x{h}): segment classification differs")
-            print(f"    compute seg counts: {lua_seg.count(0)}g {lua_seg.count(1)}s {lua_seg.count(2)}l")
-            print(f"    Py      seg counts: {py_seg.count(0)}g {py_seg.count(1)}s {py_seg.count(2)}l")
+            print(f"    compute seg counts: {lua_seg.count(0)}g {lua_seg.count(1)}s {lua_seg.count(2)}l {lua_seg.count(3)}x")
+            print(f"    Py      seg counts: {py_seg.count(0)}g {py_seg.count(1)}s {py_seg.count(2)}l {py_seg.count(3)}x")
             failed += 1
         else:
-            g, s, lng = lua_seg.count(0), lua_seg.count(1), lua_seg.count(2)
-            print(f"  OK  test {test_id} ({w}x{h}): {lua_len} steps {lua_ms}ms  seg={g}g/{s}s/{lng}l")
+            g, s, lng, xlim = lua_seg.count(0), lua_seg.count(1), lua_seg.count(2), lua_seg.count(3)
+            print(f"  OK  test {test_id} ({w}x{h}): {lua_len} steps {lua_ms}ms  seg={g}g/{s}s/{lng}l/{xlim}x")
 
     # Clean up temp file
     if TEST_LUA.exists():

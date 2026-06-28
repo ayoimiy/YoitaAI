@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     /* Run pathfinding */
     int *px, *py, len;
     float ms;
-    len = pathfind_weighted(&g, sx, sy, gx, gy, 31, 2000000, &px, &py, &ms);
+    len = pathfind_weighted(&g, sx, sy, gx, gy, 15, 20000000, &px, &py, &ms);
 
     /* Write output */
     f = fopen(outfile, "wb");

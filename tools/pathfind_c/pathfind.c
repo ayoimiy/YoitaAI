@@ -260,7 +260,7 @@ static int _pathfind_impl(
                 if (ca > 0) step += 1.0f;
             } else {
                 na = ca + 1;
-                if (na > AIR_MAX) continue;
+                if (na > AIR_MAX) na = AIR_MAX;  /* cap penalty, don't block traversal */
                 if (dr < 0) {
                     step += up_p(na);
                     if (ca == 0) step += 0.5f;

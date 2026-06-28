@@ -23,10 +23,12 @@
 /* ═══════════════════════════════════════════════════════════════
  *  Segment classification constants
  * ═══════════════════════════════════════════════════════════════ */
-#define SEG_GROUND       0   /* on solid ground — render as RED   */
+#define SEG_GROUND       0   /* on solid ground — RED            */
 #define SEG_SHORT_FLOAT  1   /* airborne < 10 steps — GOLD       */
 #define SEG_LONG_FLOAT   2   /* airborne >= 10 steps — BLUE      */
-#define LONG_FLOAT_MIN  10   /* threshold for long-float segment */
+#define SEG_OVER_LIMIT   3   /* airborne > 15 cumulative — BLUE+RED X */
+#define LONG_FLOAT_MIN   10  /* threshold for long-float segment  */
+#define OVER_LIMIT_AIR   15  /* geometric air steps before over-limit (matches AIR_MAX) */
 
 /* ═══════════════════════════════════════════════════════════════
  *  compute(w, h, data_str, sx, sy, gx, gy) -> result table
@@ -72,7 +74,7 @@ static int l_compute(lua_State *L) {
     /* ── Run pathfinding ── */
     int *px = NULL, *py = NULL, len;
     float ms;
-    len = pathfind_weighted(&g, sx, sy, gx, gy, 15, 2000000, &px, &py, &ms);
+    len = pathfind_weighted(&g, sx, sy, gx, gy, 15, 20000000, &px, &py, &ms);
     int ems = (int)(ms + 0.5f);
 
     if (!len) {
@@ -81,31 +83,75 @@ static int l_compute(lua_State *L) {
         return 2;
     }
 
-    /* ── Segment classification ──
-     * floating[i]: true if cell-below(i) is walkable (i.e. in the air)
-     * long_run[i]: true if part of a contiguous airborne segment >= LONG_FLOAT_MIN
-     */
+    /* ── Segment classification (8-neighbour flood-fill + geometric over-limit) ── */
     int *floating = (int *)malloc((size_t)len * sizeof(int));
-    int *long_run = (int *)calloc((size_t)len, sizeof(int));
+    int *visited  = (int *)calloc((size_t)len, sizeof(int));
+    int *seg      = (int *)malloc((size_t)len * sizeof(int));
+    int *group    = (int *)malloc((size_t)len * sizeof(int));  /* group ID per step */
+    int *queue    = (int *)malloc((size_t)len * sizeof(int));   /* BFS queue */
 
     for (int i = 0; i < len; i++) {
         floating[i] = grid_walkable(&g, px[i], py[i] + 1);
+        seg[i] = floating[i] ? SEG_SHORT_FLOAT : SEG_GROUND;
+        group[i] = -1;
     }
 
-    /* Scan for contiguous floating segments */
-    int run_start = 0;
+    /* 8-neighbour flood-fill: group diagonally-adjacent floating cells */
+    int n_groups = 0;
     for (int i = 0; i < len; i++) {
-        if (!floating[i]) {
-            /* Ground hit — close the previous floating run */
-            if (i - run_start >= LONG_FLOAT_MIN) {
-                for (int j = run_start; j < i; j++) long_run[j] = 1;
+        if (!floating[i] || visited[i]) continue;
+
+        /* Start a new group — BFS */
+        int qh = 0, qt = 0, gs = 0;
+        queue[qt++] = i;
+        visited[i] = 1;
+        group[i] = n_groups;
+
+        while (qh < qt) {
+            int cur = queue[qh++];
+            gs++;
+            /* Check all other floating steps for 8-neighbour adjacency */
+            for (int j = 0; j < len; j++) {
+                if (!floating[j] || visited[j]) continue;
+                int dx = abs(px[cur] - px[j]);
+                int dy = abs(py[cur] - py[j]);
+                if (dx <= 1 && dy <= 1) {  /* Chebyshev distance <= 1 = 8-connected */
+                    visited[j] = 1;
+                    group[j] = n_groups;
+                    queue[qt++] = j;
+                }
             }
-            run_start = i + 1;
+        }
+        n_groups++;
+    }
+
+    /* Mark groups >= LONG_FLOAT_MIN as long-float (seg=2) */
+    int *group_size = (int *)calloc((size_t)n_groups, sizeof(int));
+    for (int i = 0; i < len; i++) {
+        if (group[i] >= 0) group_size[group[i]]++;
+    }
+    for (int i = 0; i < len; i++) {
+        if (floating[i] && group[i] >= 0 && group_size[group[i]] >= LONG_FLOAT_MIN) {
+            seg[i] = SEG_LONG_FLOAT;
         }
     }
-    /* Handle trailing floating run */
-    if (len - run_start >= LONG_FLOAT_MIN) {
-        for (int j = run_start; j < len; j++) long_run[j] = 1;
+    free(group_size);
+
+    /* Geometric over-limit: count consecutive air steps along the path.
+     * Steps with cumulative air count > OVER_LIMIT_AIR get the red-X overlay.
+     * This is pure geometry-based — independent of the search's state machine. */
+    {
+        int air_cnt = 0;
+        for (int i = 0; i < len; i++) {
+            if (floating[i]) {
+                air_cnt++;
+            } else {
+                air_cnt = 0;
+            }
+            if (air_cnt > OVER_LIMIT_AIR) {
+                seg[i] = SEG_OVER_LIMIT;  /* overrides seg=1 or seg=2 */
+            }
+        }
     }
 
     /* ── Build return table ── */
@@ -127,11 +173,10 @@ static int l_compute(lua_State *L) {
     }
     lua_setfield(L, -2, "py");
 
-    /* seg[i] — 1-indexed Lua array (0=ground, 1=short_float, 2=long_float) */
+    /* seg[i] — 1-indexed Lua array (0=ground, 1=short, 2=long, 3=over_limit) */
     lua_createtable(L, len, 0);
     for (int i = 0; i < len; i++) {
-        int t = floating[i] ? (long_run[i] ? SEG_LONG_FLOAT : SEG_SHORT_FLOAT) : SEG_GROUND;
-        lua_pushinteger(L, t);
+        lua_pushinteger(L, seg[i]);
         lua_rawseti(L, -2, i + 1);
     }
     lua_setfield(L, -2, "seg");
@@ -146,7 +191,8 @@ static int l_compute(lua_State *L) {
     lua_setfield(L, -2, "ok");
 
     free(px); free(py);
-    free(floating); free(long_run);
+    free(floating); free(visited); free(seg);
+    free(group); free(queue);
 
     return 1;
 }
@@ -181,7 +227,7 @@ static int l_find(lua_State *L) {
 
     int *px = NULL, *py = NULL, len;
     float ms;
-    len = pathfind_weighted(&g, sx, sy, gx, gy, 15, 2000000, &px, &py, &ms);
+    len = pathfind_weighted(&g, sx, sy, gx, gy, 15, 20000000, &px, &py, &ms);
     int ems = (int)(ms + 0.5f);
 
     FILE *fo = fopen(outfile, "wb");

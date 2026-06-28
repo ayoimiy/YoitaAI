@@ -16,8 +16,8 @@ local RED   = "\27[31m"
 local GOLD  = "\27[33m"
 local BLUE  = "\27[34m"
 local RESET = "\27[0m"
-local SEG_LABEL = { [0]="GROUND     ", [1]="SHORT_FLOAT", [2]="LONG_FLOAT " }
-local SEG_COLOR = { [0]=RED,          [1]=GOLD,          [2]=BLUE }
+local SEG_LABEL = { [0]="GROUND     ", [1]="SHORT_FLOAT", [2]="LONG_FLOAT ", [3]="OVER_LIMIT " }
+local SEG_COLOR = { [0]=RED,          [1]=GOLD,          [2]=BLUE,         [3]=BLUE }
 
 -- ── Read input ─────────────────────────────────────
 local infile = arg[1] or "pf_in.bin"

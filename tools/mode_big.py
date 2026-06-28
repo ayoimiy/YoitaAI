@@ -146,6 +146,7 @@ COLOR_LONG  = (60, 140, 255)
 COLOR_SHORT = (255, 200, 0)
 COLOR_PLAY  = (200, 60, 255)
 COLOR_TGT   = (255, 30, 30)
+COLOR_OVER  = (60, 140, 255)   # blue base for over-limit
 
 # ── Renderer with pre-rendered map ──────────────────
 class BigGridRenderer:
@@ -221,21 +222,66 @@ class BigGridRenderer:
         if len(path) >= 2 and len(path) < 10000:
             cell_sz = max(2, int(self.zoom))
             floating = [world.is_walkable(p[0], p[1] + 1) for p in path]
-            long_run = [False] * len(path)
-            rs = 0
-            for i in range(1, len(path) + 1):
-                flt = floating[i - 1] if i <= len(path) else True
-                if not flt or i > len(path):
-                    if i - 1 - rs >= 10:
-                        for j in range(rs, i - 1): long_run[j] = True
-                    rs = i
+            n = len(path)
+
+            # ── 8-neighbour flood-fill segment groups (diagonals connect) ──
+            group = [-1] * n
+            n_groups = 0
+            for i in range(n):
+                if not floating[i] or group[i] >= 0:
+                    continue
+                # BFS this group
+                q = [i]
+                group[i] = n_groups
+                for cur in q:
+                    cx, cy = path[cur]
+                    for j in range(n):
+                        if not floating[j] or group[j] >= 0:
+                            continue
+                        dx = abs(cx - path[j][0])
+                        dy = abs(cy - path[j][1])
+                        if dx <= 1 and dy <= 1:  # 8-connected
+                            group[j] = n_groups
+                            q.append(j)
+                n_groups += 1
+
+            # Group sizes
+            gs = [0] * n_groups
+            for i in range(n):
+                if group[i] >= 0:
+                    gs[group[i]] += 1
+
+            # ── Geometric over-limit: consecutive air > 15 ──
+            over_limit = [False] * n
+            air_cnt = 0
+            for i in range(n):
+                if floating[i]:
+                    air_cnt += 1
+                else:
+                    air_cnt = 0
+                if air_cnt > 15:
+                    over_limit[i] = True
+
+            # ── Draw each cell ──
             for idx, (px, py) in enumerate(path):
                 sx, sy = self.world_to_screen(px, py)
-                on_gnd = not world.is_walkable(px, py + 1)
-                if on_gnd:         c = COLOR_GND
-                elif long_run[idx]: c = COLOR_LONG
-                else:               c = COLOR_SHORT
+                if over_limit[idx]:
+                    # Blue base + red X
+                    c = COLOR_OVER
+                elif floating[idx] and group[idx] >= 0 and gs[group[idx]] >= 10:
+                    c = COLOR_LONG
+                elif floating[idx]:
+                    c = COLOR_SHORT
+                else:
+                    c = COLOR_GND
                 pygame.draw.rect(self.screen, c, (int(sx), int(sy), cell_sz, cell_sz))
+                # Red X for over-limit
+                if over_limit[idx] and cell_sz >= 6:
+                    cx, cy = int(sx + cell_sz // 2), int(sy + cell_sz // 2)
+                    r = max(2, cell_sz // 3)
+                    red = (220, 40, 40)
+                    pygame.draw.line(self.screen, red, (cx - r, cy - r), (cx + r, cy + r), 1)
+                    pygame.draw.line(self.screen, red, (cx + r, cy - r), (cx - r, cy + r), 1)
 
         if target_pos:
             tx, ty = self.world_to_screen(*target_pos)
@@ -266,7 +312,8 @@ class BigGridRenderer:
 
         lines = [
             f"Zoom: {self.zoom:.3f}x  |  {algo_name}",
-            f"Path: {len(path)} cells  |  {elapsed_ms:.0f}ms",
+            f"Path: {len(path)} cells  |  {elapsed_ms:.0f}ms" +
+            (" (NO PATH)" if len(path) < 2 else (" (>{10000} NOT DRAWN)" if len(path) >= 10000 else "")),
             f"RED=ground({gnd})  BLUE=float>={10}({lf})  GOLD=float<10({ft - lf})",
             f"View: {x0},{y0} - {x1},{y1}",
             "L-drag=pan  Wheel=zoom  R-click=target  T=find  R=regen  1-8=algo",

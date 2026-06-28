@@ -313,7 +313,7 @@ def pathfind_weighted(world, start, goal):
       Takeoff  (+0.5):  ground → upward flight
     """
     _MAX_AIR  = 15   # cap consecutive air steps (beyond this, penalty is prohibitive)
-    _MAX_ITER = 200000  # safety net — abort if too many expansions
+    _MAX_ITER = 20000000  # 20M — covers 1000x1000×16AIR full state space
 
     open_set = MinHeap()
     closed_set = set()
